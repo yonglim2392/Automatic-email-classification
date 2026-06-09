@@ -58,21 +58,25 @@ export async function writeSummaryEmail(
   const taskList = completedTasks
     .map(t => {
       const completedDate = t.completedAt.toISOString().split("T")[0]
-      return `- ${t.title}${t.completionNote ? `: ${t.completionNote}` : ""} (완료일: ${completedDate})`
+      return `- ${t.title}${t.completionNote ? `: ${t.completionNote}` : ""} (처리일: ${completedDate})`
     })
     .join("\n")
 
-  const prompt = `다음 원본 이메일에 대한 완료 회신 메일을 전문적으로 작성하세요. JSON만 반환하세요.
+  const prompt = `다음 원본 이메일에 대한 회신 메일을 작성하세요. JSON만 반환하세요.
 
-중요: 완료 메모에 "3일 뒤", "다음 주" 등 상대적 날짜 표현이 있으면, 반드시 해당 업무의 완료일(YYYY-MM-DD) 기준으로 날짜를 계산하여 구체적인 날짜로 변환하세요. 오늘 날짜를 기준으로 계산하지 마세요.
+규칙:
+- 상대방의 문의/요청에 직접 답변하는 내용만 작성하세요.
+- 내부 처리 날짜, 확인 날짜, 완료 날짜 등 내부 업무 정보는 절대 언급하지 마세요.
+- 완료 메모에 "3일 뒤", "다음 주" 등 상대적 날짜 표현이 있으면, 처리일(YYYY-MM-DD) 기준으로 계산하여 구체적인 날짜로 변환하세요.
+- 간결하고 자연스러운 비즈니스 어투로 작성하세요.
 
 원본 제목: ${originalSubject}
 원본 내용: ${originalBody}
 
-완료된 업무:
+답변할 내용 (완료 메모 기준):
 ${taskList}
 
-형식: {"subject": "Re: 원본제목", "body": "완료 회신 내용"}`
+형식: {"subject": "Re: 원본제목", "body": "회신 내용"}`
 
   const result = await model.generateContent(prompt)
   const text = result.response.text()
