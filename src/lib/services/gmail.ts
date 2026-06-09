@@ -1,6 +1,22 @@
 import { google } from "googleapis"
 import type { gmail_v1 } from "googleapis"
 
+function decodeRfc2047(str: string): string {
+  return str.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_, charset, encoding, text) => {
+    try {
+      if (encoding.toUpperCase() === "B") {
+        return Buffer.from(text, "base64").toString("utf-8")
+      }
+      const cleaned = text.replace(/_/g, " ").replace(/=([A-F0-9]{2})/gi, (_: string, hex: string) =>
+        String.fromCharCode(parseInt(hex, 16))
+      )
+      return Buffer.from(cleaned, "binary").toString("utf-8")
+    } catch {
+      return str
+    }
+  })
+}
+
 function getGmailClient() {
   const auth = new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
@@ -36,8 +52,8 @@ export async function listNewEmails(processedGmailIds: string[]): Promise<RawEma
       format: "full",
     })
     const headers = detail.data.payload?.headers ?? []
-    const from = headers.find(h => h.name === "From")?.value ?? ""
-    const subject = headers.find(h => h.name === "Subject")?.value ?? ""
+    const from = decodeRfc2047(headers.find(h => h.name === "From")?.value ?? "")
+    const subject = decodeRfc2047(headers.find(h => h.name === "Subject")?.value ?? "")
     const dateStr = headers.find(h => h.name === "Date")?.value ?? ""
     const body = extractBody(detail.data.payload)
     emails.push({
