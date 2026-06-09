@@ -29,7 +29,7 @@ function extractSenderName(from: string) {
   return match ? match[1].trim().replace(/^"|"$/g, "") : from
 }
 
-export default function DashboardClient({ role, userName }: { role: string; userName: string }) {
+export default function DashboardClient({ userName }: { userName: string }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [completionNote, setCompletionNote] = useState<Record<string, string>>({})
   const [completing, setCompleting] = useState<Set<string>>(new Set())
@@ -77,12 +77,9 @@ export default function DashboardClient({ role, userName }: { role: string; user
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">내 업무</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{userName} · {role === "admin" ? "관리자" : "담당자"}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{userName}</p>
         </div>
         <div className="flex gap-2 text-sm">
-          {role === "admin" && (
-            <a href="/admin" className="border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50">관리자 페이지</a>
-          )}
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
             className="border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50"

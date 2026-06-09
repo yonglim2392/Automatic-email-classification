@@ -5,5 +5,6 @@ import DashboardClient from "./DashboardClient"
 export default async function DashboardPage() {
   const session = await auth()
   if (!session) redirect("/login")
-  return <DashboardClient role={session.user.role} userName={session.user.name ?? ""} />
+  if (session.user.role === "admin") redirect("/admin")
+  return <DashboardClient userName={session.user.name ?? ""} />
 }

@@ -3,5 +3,7 @@ import { auth } from "@/auth"
 
 export default async function Home() {
   const session = await auth()
-  redirect(session ? "/dashboard" : "/login")
+  if (!session) redirect("/login")
+  if (session.user.role === "admin") redirect("/admin")
+  redirect("/dashboard")
 }

@@ -16,7 +16,10 @@ function getModel() {
 
 export async function parseEmail(subject: string, body: string): Promise<ParsedTask[]> {
   const model = getModel()
-  const prompt = `다음 이메일에서 업무 목록을 추출하세요. JSON 배열만 반환하고 다른 텍스트는 포함하지 마세요.
+  const today = new Date().toISOString().split("T")[0]
+  const prompt = `오늘 날짜: ${today}
+다음 이메일에서 업무 목록을 추출하세요. JSON 배열만 반환하고 다른 텍스트는 포함하지 마세요.
+"내일", "명일", "다음주" 등 상대적 날짜 표현은 오늘 날짜 기준으로 계산하세요.
 
 제목: ${subject}
 본문:
