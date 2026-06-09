@@ -69,7 +69,15 @@ export default function DashboardClient({ userName }: { userName: string }) {
     }
   }
 
-  const pending = tasks.filter(t => t.status !== "done")
+  const pending = tasks
+    .filter(t => t.status !== "done")
+    .sort((a, b) => {
+      const aHas = a.deadline !== null
+      const bHas = b.deadline !== null
+      if (aHas !== bHas) return aHas ? -1 : 1
+      if (!aHas && !bHas) return new Date(a.email.receivedAt).getTime() - new Date(b.email.receivedAt).getTime()
+      return new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime()
+    })
   const done = tasks.filter(t => t.status === "done")
 
   // 완료 업무 일자별 그룹핑
@@ -133,7 +141,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
                   <div className="flex flex-col gap-2 items-end shrink-0">
                     <input
                       type="text"
-                      placeholder="완료 메모 (선택)"
+                      placeholder="완료 메모"
                       className="text-sm border rounded px-2 py-1 w-36"
                       value={completionNote[task.id] ?? ""}
                       onChange={e => setCompletionNote(prev => ({ ...prev, [task.id]: e.target.value }))}
