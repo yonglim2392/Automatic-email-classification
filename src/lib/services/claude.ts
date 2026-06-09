@@ -31,7 +31,7 @@ ${body}
     "title": "업무 제목 (한 줄 요약)",
     "description": "상세 내용",
     "taskType": "${VALID_TASK_TYPES.join(" | ")} 중 하나",
-    "deadline": "YYYY-MM-DD 형식 또는 null"
+    "deadline": "YYYY-MM-DDTHH:mm 형식. 시간 언급 있으면 해당 시간, 없으면 T00:00. 마감기한 없으면 null"
   }
 ]`
 

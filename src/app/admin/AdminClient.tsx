@@ -43,6 +43,16 @@ function formatDateTime(dateStr: string | null) {
   })
 }
 
+function formatDeadline(deadline: string | null): string {
+  if (!deadline) return ""
+  const d = new Date(deadline)
+  const dateStr = d.toLocaleDateString("ko-KR")
+  const h = d.getHours(), m = d.getMinutes()
+  if (h === 0 && m === 0) return dateStr
+  const timeStr = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
+  return `${dateStr} ${timeStr}`
+}
+
 const EMAIL_STATUS_LABEL: Record<string, string> = {
   processed: "진행 중",
   ready: "발송 대기",
@@ -204,9 +214,9 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
             return (
               <div key={group.emailId} className="border rounded-xl overflow-hidden border-gray-200">
                 {/* 헤더 (클릭 시 펼침) */}
-                <button
+                <div
                   onClick={() => toggleExpand(group.emailId)}
-                  className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer select-none"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -243,7 +253,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                       <span className="text-gray-400 text-sm">{isOpen ? "▲" : "▼"}</span>
                     </div>
                   </div>
-                </button>
+                </div>
 
                 {/* 펼쳐진 내용 */}
                 {isOpen && (
@@ -258,7 +268,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                             <span className="text-xs text-gray-400">{task.taskType}</span>
                             {task.deadline && task.status !== "done" && (
                               <span className="text-xs text-orange-500">
-                                마감 {new Date(task.deadline).toLocaleDateString("ko-KR")}
+                                마감 {formatDeadline(task.deadline)}
                               </span>
                             )}
                           </div>

@@ -20,6 +20,16 @@ function daysLeft(deadline: string | null): number | null {
   return Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 }
 
+function formatDeadline(deadline: string | null): string {
+  if (!deadline) return ""
+  const d = new Date(deadline)
+  const dateStr = d.toLocaleDateString("ko-KR")
+  const h = d.getHours(), m = d.getMinutes()
+  if (h === 0 && m === 0) return dateStr
+  const timeStr = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
+  return `${dateStr} ${timeStr}`
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("ko-KR", { month: "long", day: "numeric" })
 }
@@ -115,7 +125,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
                     </p>
                     {task.deadline && (
                       <p className={`text-sm mt-1 ${isUrgent ? "text-red-600 font-medium" : "text-gray-500"}`}>
-                        마감 {new Date(task.deadline).toLocaleDateString("ko-KR")}
+                        마감 {formatDeadline(task.deadline)}
                         {dl !== null && ` (D-${dl})`}
                       </p>
                     )}
