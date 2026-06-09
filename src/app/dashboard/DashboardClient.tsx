@@ -26,12 +26,7 @@ function formatDeadline(deadline: string | null): string {
   const dateStr = d.toLocaleDateString("ko-KR")
   const h = d.getHours(), m = d.getMinutes()
   if (h === 0 && m === 0) return dateStr
-  const timeStr = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
-  return `${dateStr} ${timeStr}`
-}
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("ko-KR", { month: "long", day: "numeric" })
+  return `${dateStr} ${d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`
 }
 
 function extractSenderName(from: string) {
@@ -41,11 +36,14 @@ function extractSenderName(from: string) {
 
 export default function DashboardClient({ userName }: { userName: string }) {
   const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
   const [completionNote, setCompletionNote] = useState<Record<string, string>>({})
   const [completing, setCompleting] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    fetch("/api/tasks").then(r => r.json()).then(setTasks)
+    fetch("/api/tasks")
+      .then(r => r.json())
+      .then(data => { setTasks(data); setLoading(false) })
   }, [])
 
   async function handleComplete(taskId: string) {
@@ -80,7 +78,6 @@ export default function DashboardClient({ userName }: { userName: string }) {
     })
   const done = tasks.filter(t => t.status === "done")
 
-  // 완료 업무 일자별 그룹핑 (최신 날짜 먼저)
   const doneByDate: Record<string, Task[]> = {}
   for (const t of done) {
     const dateKey = t.completedAt
@@ -96,108 +93,140 @@ export default function DashboardClient({ userName }: { userName: string }) {
   })
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">내 업무</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{userName}</p>
-        </div>
-        <div className="flex gap-2 text-sm">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        {/* 헤더 */}
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">내 업무</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{userName}</p>
+          </div>
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50"
+            className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-white transition-colors"
           >
             로그아웃
           </button>
         </div>
-      </div>
 
-      {/* 대기 업무 */}
-      {pending.length === 0 ? (
-        <p className="text-gray-400 text-sm text-center py-10">처리할 업무가 없습니다.</p>
-      ) : (
-        <div className="space-y-3">
-          {pending.map(task => {
-            const dl = daysLeft(task.deadline)
-            const isUrgent = dl !== null && dl <= 3
-            const isCompleting = completing.has(task.id)
-            return (
-              <div
-                key={task.id}
-                className={`border rounded-xl p-4 ${isUrgent ? "border-red-300 bg-red-50" : "border-gray-200 bg-white"}`}
-              >
-                <div className="flex justify-between items-start gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{task.taskType}</span>
-                      {isUrgent && <span className="text-xs font-semibold text-red-600">⚠ 마감 임박</span>}
-                    </div>
-                    <p className="font-semibold text-gray-900">{task.title}</p>
-                    <p className="text-sm text-gray-500 mt-0.5 truncate">
-                      {extractSenderName(task.email.from)} · {task.email.subject}
-                    </p>
-                    {task.deadline && (
-                      <p className={`text-sm mt-1 ${isUrgent ? "text-red-600 font-medium" : "text-gray-500"}`}>
-                        마감 {formatDeadline(task.deadline)}
-                        {dl !== null && ` (D-${dl})`}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-2 items-end shrink-0">
-                    <input
-                      type="text"
-                      placeholder="완료 메모"
-                      className="text-sm border rounded px-2 py-1 w-36"
-                      value={completionNote[task.id] ?? ""}
-                      onChange={e => setCompletionNote(prev => ({ ...prev, [task.id]: e.target.value }))}
-                      disabled={isCompleting}
-                    />
-                    <button
-                      onClick={() => handleComplete(task.id)}
-                      disabled={isCompleting}
-                      className="bg-green-600 text-white text-sm px-4 py-1.5 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isCompleting ? "처리 중..." : "완료"}
-                    </button>
-                  </div>
-                </div>
+        {/* 로딩 */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <div className="w-7 h-7 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+            <p className="text-sm text-gray-400">불러오는 중...</p>
+          </div>
+        )}
+
+        {!loading && (
+          <>
+            {/* 대기 업무 */}
+            {pending.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-2xl">✓</div>
+                <p className="font-semibold text-gray-700">모든 업무를 처리했습니다</p>
+                <p className="text-sm text-gray-400">새로운 업무가 배정되면 여기에 표시됩니다.</p>
               </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* 완료 업무 일자별 */}
-      {sortedDates.length > 0 && (
-        <div className="mt-10">
-          <h2 className="text-base font-semibold text-gray-500 mb-4">완료된 업무</h2>
-          <div className="space-y-6">
-            {sortedDates.map(date => (
-              <div key={date}>
-                <div className="flex items-center gap-2 mb-2">
-                  <p className="text-xs font-semibold text-gray-400 tracking-wide">{date}</p>
-                  <span className="text-xs text-gray-300">{doneByDate[date].length}건</span>
-                </div>
-                <div className="space-y-2">
-                  {doneByDate[date].map(task => (
-                    <div key={task.id} className="border border-gray-100 rounded-lg p-3 bg-gray-50 flex items-start gap-3">
-                      <span className="text-green-500 mt-0.5 shrink-0">✓</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-500 line-through">{task.title}</p>
-                        <p className="text-xs text-gray-400 truncate">
-                          {extractSenderName(task.email.from)} · {task.email.subject}
-                          {task.completionNote && ` · "${task.completionNote}"`}
-                        </p>
+            ) : (
+              <div className="space-y-3 mb-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  대기 중 {pending.length}건
+                </p>
+                {pending.map(task => {
+                  const dl = daysLeft(task.deadline)
+                  const isUrgent = dl !== null && dl <= 3
+                  const isCompleting = completing.has(task.id)
+                  return (
+                    <div
+                      key={task.id}
+                      className={`rounded-xl border bg-white shadow-sm overflow-hidden ${isUrgent ? "border-red-300" : "border-gray-200"}`}
+                    >
+                      {isUrgent && (
+                        <div className="bg-red-500 px-4 py-1.5 flex items-center gap-1.5">
+                          <span className="text-white text-xs font-semibold">⚠ 마감 임박</span>
+                          <span className="text-red-200 text-xs">{formatDeadline(task.deadline)} (D-{dl})</span>
+                        </div>
+                      )}
+                      <div className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">{task.taskType}</span>
+                            </div>
+                            <p className="font-semibold text-gray-900 leading-snug">{task.title}</p>
+                            <p className="text-sm text-gray-500 mt-0.5 truncate">
+                              {extractSenderName(task.email.from)} · {task.email.subject}
+                            </p>
+                            {task.deadline && !isUrgent && (
+                              <p className="text-sm text-gray-400 mt-1">마감 {formatDeadline(task.deadline)}</p>
+                            )}
+                          </div>
+                        </div>
+                        {/* 완료 입력 영역 - 모바일에서 전체 너비 */}
+                        <div className="flex gap-2 mt-3">
+                          <input
+                            type="text"
+                            placeholder="완료 메모"
+                            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:bg-gray-50"
+                            value={completionNote[task.id] ?? ""}
+                            onChange={e => setCompletionNote(prev => ({ ...prev, [task.id]: e.target.value }))}
+                            disabled={isCompleting}
+                            onKeyDown={e => { if (e.key === "Enter") handleComplete(task.id) }}
+                          />
+                          <button
+                            onClick={() => handleComplete(task.id)}
+                            disabled={isCompleting}
+                            className="shrink-0 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isCompleting ? "처리 중..." : "완료"}
+                          </button>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-300 shrink-0">{task.taskType}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* 완료 업무 일자별 */}
+            {sortedDates.length > 0 && (
+              <div className="mt-10">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">완료된 업무</p>
+                <div className="space-y-5">
+                  {sortedDates.map(date => (
+                    <div key={date}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <p className="text-xs font-semibold text-gray-500">{date}</p>
+                        <span className="text-xs text-gray-300">{doneByDate[date].length}건</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {doneByDate[date].map(task => (
+                          <div key={task.id} className="bg-white border border-gray-100 rounded-lg px-4 py-3">
+                            <div className="flex items-start gap-3">
+                              <span className="text-green-400 shrink-0 mt-0.5 text-sm">✓</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm text-gray-400 line-through leading-snug">{task.title}</p>
+                                <p className="text-xs text-gray-400 mt-0.5 truncate">
+                                  {extractSenderName(task.email.from)} · {task.email.subject}
+                                </p>
+                                {task.completionNote && (
+                                  <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
+                                    <p className="text-xs text-gray-500">{task.completionNote}</p>
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-300 shrink-0">{task.taskType}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
