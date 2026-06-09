@@ -133,14 +133,14 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     )
   }
 
-  async function handlePreviewSummary(emailId: string) {
+  async function handlePreviewSummary(emailId: string, regenerate = false) {
     if (previewing.has(emailId)) return
     setPreviewing(prev => new Set([...prev, emailId]))
     try {
       const res = await fetch("/api/admin/preview-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailId }),
+        body: JSON.stringify({ emailId, regenerate }),
       })
       const data = await res.json()
       setPreview({ emailId, to: data.to, subject: data.subject, body: data.body })
@@ -362,20 +362,29 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                 />
               </div>
             </div>
-            <div className="px-5 py-4 border-t flex justify-end gap-2">
+            <div className="px-5 py-4 border-t flex justify-between items-center">
               <button
-                onClick={() => setPreview(null)}
-                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                onClick={() => handlePreviewSummary(preview.emailId, true)}
+                disabled={previewing.has(preview.emailId)}
+                className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
               >
-                취소
+                {previewing.has(preview.emailId) ? "생성 중..." : "↺ 다시 생성"}
               </button>
-              <button
-                onClick={handleSendSummary}
-                disabled={sending.has(preview.emailId)}
-                className="px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded font-medium disabled:opacity-50"
-              >
-                {sending.has(preview.emailId) ? "발송 중..." : "📤 메일 발송"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPreview(null)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSendSummary}
+                  disabled={sending.has(preview.emailId)}
+                  className="px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded font-medium disabled:opacity-50"
+                >
+                  {sending.has(preview.emailId) ? "발송 중..." : "📤 메일 발송"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

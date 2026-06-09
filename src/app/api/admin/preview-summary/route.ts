@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { emailId } = await request.json()
+  const { emailId, regenerate } = await request.json()
 
   const email = await prisma.email.findUnique({
     where: { id: emailId },
@@ -22,8 +22,8 @@ export async function POST(request: Request) {
 
   if (!email) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  // 이미 생성된 요약이 있으면 재사용
-  if (email.summarySubject && email.summaryBody) {
+  // 이미 생성된 요약이 있고 재생성 요청이 아니면 재사용
+  if (!regenerate && email.summarySubject && email.summaryBody) {
     return NextResponse.json({
       to: email.from,
       subject: email.summarySubject,

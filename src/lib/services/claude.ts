@@ -52,10 +52,15 @@ export async function writeSummaryEmail(
 ): Promise<{ subject: string; body: string }> {
   const model = getModel()
   const taskList = completedTasks
-    .map(t => `- ${t.title}${t.completionNote ? `: ${t.completionNote}` : ""} (완료일: ${t.completedAt.toLocaleDateString("ko-KR")})`)
+    .map(t => {
+      const completedDate = t.completedAt.toISOString().split("T")[0]
+      return `- ${t.title}${t.completionNote ? `: ${t.completionNote}` : ""} (완료일: ${completedDate})`
+    })
     .join("\n")
 
   const prompt = `다음 원본 이메일에 대한 완료 회신 메일을 전문적으로 작성하세요. JSON만 반환하세요.
+
+중요: 완료 메모에 "3일 뒤", "다음 주" 등 상대적 날짜 표현이 있으면, 반드시 해당 업무의 완료일(YYYY-MM-DD) 기준으로 날짜를 계산하여 구체적인 날짜로 변환하세요. 오늘 날짜를 기준으로 계산하지 마세요.
 
 원본 제목: ${originalSubject}
 원본 내용: ${originalBody}
