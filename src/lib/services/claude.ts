@@ -38,11 +38,15 @@ ${body}
   const result = await model.generateContent(prompt)
   const text = result.response.text()
   const jsonMatch = text.match(/\[[\s\S]*\]/)
-  const parsed: ParsedTask[] = JSON.parse(jsonMatch ? jsonMatch[0] : "[]")
-  return parsed.map(t => ({
-    ...t,
-    taskType: VALID_TASK_TYPES.includes(t.taskType) ? t.taskType : "기타",
-  }))
+  try {
+    const parsed: ParsedTask[] = JSON.parse(jsonMatch ? jsonMatch[0] : "[]")
+    return parsed.map(t => ({
+      ...t,
+      taskType: VALID_TASK_TYPES.includes(t.taskType) ? t.taskType : "기타",
+    }))
+  } catch {
+    return []
+  }
 }
 
 export async function writeSummaryEmail(
@@ -73,5 +77,9 @@ ${taskList}
   const result = await model.generateContent(prompt)
   const text = result.response.text()
   const jsonMatch = text.match(/\{[\s\S]*\}/)
-  return JSON.parse(jsonMatch ? jsonMatch[0] : "{}")
+  try {
+    return JSON.parse(jsonMatch ? jsonMatch[0] : "{}")
+  } catch {
+    return { subject: `Re: ${originalSubject}`, body: "" }
+  }
 }

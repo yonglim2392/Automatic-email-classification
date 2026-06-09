@@ -31,13 +31,15 @@ export async function POST() {
       include: { assignee: true },
     })
     for (const task of createdTasks) {
-      await sendAssignmentNotification(
-        task.id,
-        task.assignee.email,
-        task.assignee.id,
-        task.title,
-        task.deadline,
-      )
+      try {
+        await sendAssignmentNotification(
+          task.id,
+          task.assignee.email,
+          task.assignee.id,
+          task.title,
+          task.deadline,
+        )
+      } catch { /* 알림 실패해도 폴링은 계속 */ }
     }
     processed++
   }

@@ -9,7 +9,11 @@ export async function POST(request: Request) {
 
   const { taskId, completionNote } = await request.json()
 
-  await completeTask(taskId, session.user.id, completionNote ?? null)
+  try {
+    await completeTask(taskId, session.user.id, completionNote ?? null)
+  } catch {
+    return NextResponse.json({ error: "권한 없음" }, { status: 403 })
+  }
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
