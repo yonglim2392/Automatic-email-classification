@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/gmail/poll",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/notify/deadline",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}
