@@ -157,7 +157,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
       await fetch("/api/admin/send-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailId }),
+        body: JSON.stringify({ emailId, subject: preview.subject, body: preview.body }),
       })
       setGroups(prev =>
         prev.map(g => g.emailId === emailId ? { ...g, emailStatus: "completed" } : g)
@@ -266,7 +266,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                           disabled={previewing.has(group.emailId)}
                           className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1.5 rounded font-medium disabled:opacity-50"
                         >
-                          {previewing.has(group.emailId) ? "불러오는 중..." : "📤 요약 메일 발송"}
+                          {previewing.has(group.emailId) ? "불러오는 중..." : "📤 메일 발송"}
                         </button>
                       )}
                       {group.emailStatus === "completed" && (
@@ -345,11 +345,21 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
               </div>
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">제목</p>
-                <p className="text-sm text-gray-700">{preview.subject}</p>
+                <input
+                  type="text"
+                  value={preview.subject}
+                  onChange={e => setPreview(prev => prev ? { ...prev, subject: e.target.value } : prev)}
+                  className="w-full text-sm border rounded px-2 py-1.5 text-gray-700"
+                />
               </div>
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">본문</p>
-                <pre className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-3 max-h-60 overflow-y-auto">{preview.body}</pre>
+                <textarea
+                  value={preview.body}
+                  onChange={e => setPreview(prev => prev ? { ...prev, body: e.target.value } : prev)}
+                  rows={10}
+                  className="w-full text-sm border rounded px-2 py-1.5 text-gray-700 resize-y"
+                />
               </div>
             </div>
             <div className="px-5 py-4 border-t flex justify-end gap-2">
@@ -364,7 +374,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                 disabled={sending.has(preview.emailId)}
                 className="px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded font-medium disabled:opacity-50"
               >
-                {sending.has(preview.emailId) ? "발송 중..." : "📤 발송"}
+                {sending.has(preview.emailId) ? "발송 중..." : "📤 메일 발송"}
               </button>
             </div>
           </div>

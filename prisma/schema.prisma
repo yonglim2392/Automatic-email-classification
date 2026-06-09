@@ -20,15 +20,17 @@ model User {
 }
 
 model Email {
-  id         String   @id @default(cuid())
-  gmailId    String   @unique
-  from       String
-  subject    String
-  body       String
-  receivedAt DateTime
-  status     String   @default("pending")
-  tasks      Task[]
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  gmailId        String   @unique
+  from           String
+  subject        String
+  body           String
+  receivedAt     DateTime
+  status         String   @default("pending")
+  summarySubject String?
+  summaryBody    String?
+  tasks          Task[]
+  createdAt      DateTime @default(now())
 }
 
 model Task {

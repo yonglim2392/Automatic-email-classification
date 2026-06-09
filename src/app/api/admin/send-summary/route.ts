@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
-import { writeSummaryEmail } from "@/lib/services/claude"
 import { sendEmail } from "@/lib/services/gmail"
 
 export async function POST(request: Request) {
@@ -10,31 +9,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { emailId } = await request.json()
+  const { emailId, subject, body } = await request.json()
 
-  const email = await prisma.email.findUnique({
-    where: { id: emailId },
-    include: {
-      tasks: {
-        select: { title: true, completionNote: true, completedAt: true },
-      },
-    },
-  })
-
+  const email = await prisma.email.findUnique({ where: { id: emailId } })
   if (!email) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  const doneTasks = email.tasks.filter(t => t.completedAt !== null) as {
-    title: string
-    completionNote: string | null
-    completedAt: Date
-  }[]
-
-  const summary = await writeSummaryEmail(email.subject, email.body, doneTasks)
-  await sendEmail(email.from, summary.subject, summary.body)
+  await sendEmail(email.from, subject, body)
 
   await prisma.email.update({
     where: { id: emailId },
-    data: { status: "completed" },
+    data: { status: "completed", summarySubject: subject, summaryBody: body },
   })
 
   return NextResponse.json({ ok: true })
