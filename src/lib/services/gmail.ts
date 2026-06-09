@@ -67,10 +67,20 @@ export async function listNewEmails(processedGmailIds: string[]): Promise<RawEma
   return emails
 }
 
+function encodeAddressHeader(address: string): string {
+  const decoded = decodeRfc2047(address)
+  const match = decoded.match(/^(.+?)\s*<(.+?)>$/)
+  if (!match) return decoded
+  const [, name, email] = match
+  const clean = name.trim().replace(/^"|"$/g, "")
+  if (!/[^\x00-\x7F]/.test(clean)) return decoded
+  return `=?UTF-8?B?${Buffer.from(clean).toString("base64")}?= <${email}>`
+}
+
 export async function sendEmail(to: string, subject: string, body: string): Promise<void> {
   const gmail = getGmailClient()
   const message = [
-    `To: ${to}`,
+    `To: ${encodeAddressHeader(to)}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
     "Content-Type: text/plain; charset=utf-8",
     "MIME-Version: 1.0",

@@ -25,6 +25,8 @@ type EmailGroup = {
 
 type Assignee = { id: string; name: string }
 
+type PreviewData = { emailId: string; to: string; subject: string; body: string }
+
 function extractSenderName(from: string) {
   const match = from.match(/^(.+?)\s*</)
   return match ? match[1].trim().replace(/^"|"$/g, "") : from
@@ -71,6 +73,8 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   const [polling, setPolling] = useState(false)
   const [pollResult, setPollResult] = useState<string | null>(null)
   const [sending, setSending] = useState<Set<string>>(new Set())
+  const [previewing, setPreviewing] = useState<Set<string>>(new Set())
+  const [preview, setPreview] = useState<PreviewData | null>(null)
 
   function loadTasks() {
     fetch("/api/tasks")
@@ -129,8 +133,25 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     )
   }
 
-  async function handleSendSummary(emailId: string) {
-    if (sending.has(emailId)) return
+  async function handlePreviewSummary(emailId: string) {
+    if (previewing.has(emailId)) return
+    setPreviewing(prev => new Set([...prev, emailId]))
+    try {
+      const res = await fetch("/api/admin/preview-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailId }),
+      })
+      const data = await res.json()
+      setPreview({ emailId, to: data.to, subject: data.subject, body: data.body })
+    } finally {
+      setPreviewing(prev => { const s = new Set(prev); s.delete(emailId); return s })
+    }
+  }
+
+  async function handleSendSummary() {
+    if (!preview || sending.has(preview.emailId)) return
+    const emailId = preview.emailId
     setSending(prev => new Set([...prev, emailId]))
     try {
       await fetch("/api/admin/send-summary", {
@@ -141,6 +162,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
       setGroups(prev =>
         prev.map(g => g.emailId === emailId ? { ...g, emailStatus: "completed" } : g)
       )
+      setPreview(null)
     } finally {
       setSending(prev => { const s = new Set(prev); s.delete(emailId); return s })
     }
@@ -240,11 +262,11 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                     <div className="flex items-center gap-2 shrink-0">
                       {group.emailStatus === "ready" && (
                         <button
-                          onClick={e => { e.stopPropagation(); handleSendSummary(group.emailId) }}
-                          disabled={isSending}
+                          onClick={e => { e.stopPropagation(); handlePreviewSummary(group.emailId) }}
+                          disabled={previewing.has(group.emailId)}
                           className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1.5 rounded font-medium disabled:opacity-50"
                         >
-                          {isSending ? "발송 중..." : "📤 요약 메일 발송"}
+                          {previewing.has(group.emailId) ? "불러오는 중..." : "📤 요약 메일 발송"}
                         </button>
                       )}
                       {group.emailStatus === "completed" && (
@@ -306,6 +328,46 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* 미리보기 모달 */}
+      {preview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="px-5 py-4 border-b">
+              <h2 className="font-semibold text-gray-800">발송 메일 미리보기</h2>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">받는 사람</p>
+                <p className="text-sm text-gray-700">{preview.to}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">제목</p>
+                <p className="text-sm text-gray-700">{preview.subject}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">본문</p>
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-3 max-h-60 overflow-y-auto">{preview.body}</pre>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setPreview(null)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSendSummary}
+                disabled={sending.has(preview.emailId)}
+                className="px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded font-medium disabled:opacity-50"
+              >
+                {sending.has(preview.emailId) ? "발송 중..." : "📤 발송"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
