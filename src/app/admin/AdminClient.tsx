@@ -1,6 +1,5 @@
 "use client"
 import { useEffect, useState } from "react"
-import { signOut } from "next-auth/react"
 
 type Task = {
   id: string
@@ -217,23 +216,12 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="h-full">
+      <div className="max-w-4xl mx-auto px-6 py-6">
         {/* 헤더 */}
-        <div className="flex flex-wrap justify-between items-start gap-3 mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">전체 업무 현황</h1>
-          </div>
-          <div className="flex gap-2 items-center text-sm flex-wrap">
-            <a href="/admin/rules" className="text-blue-600 hover:underline">배정 규칙</a>
-            <a href="/admin/users" className="text-blue-600 hover:underline">담당자 관리</a>
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-white transition-colors text-gray-600"
-            >
-              로그아웃
-            </button>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-slate-800">업무 현황</h1>
+          <p className="text-sm text-slate-400 mt-0.5">수신된 이메일의 업무 처리 현황을 확인합니다</p>
         </div>
 
         {/* 통계 카드 */}

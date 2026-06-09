@@ -3,10 +3,17 @@ import { useEffect, useState } from "react"
 
 type User = { id: string; name: string; email: string; role: string }
 
+const ROLE_LABEL: Record<string, string> = { admin: "관리자", assignee: "담당자" }
+const ROLE_COLOR: Record<string, string> = {
+  admin: "bg-indigo-50 text-indigo-700 border-indigo-100",
+  assignee: "bg-slate-50 text-slate-600 border-slate-100",
+}
+
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "assignee" })
-  const [msg, setMsg] = useState("")
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     fetch("/api/admin/users").then(r => r.json()).then(setUsers)
@@ -14,83 +21,115 @@ export default function UsersPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
-    const res = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    })
-    if (res.ok) {
-      const user = await res.json()
-      setUsers(prev => [...prev, user])
-      setForm({ name: "", email: "", password: "", role: "assignee" })
-      setMsg("계정이 생성되었습니다.")
+    setSubmitting(true)
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      if (res.ok) {
+        const user = await res.json()
+        setUsers(prev => [...prev, user])
+        setForm({ name: "", email: "", password: "", role: "assignee" })
+        setMsg({ type: "ok", text: "계정이 생성되었습니다." })
+        setTimeout(() => setMsg(null), 2500)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setMsg({ type: "err", text: data.error ?? "계정 생성에 실패했습니다." })
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">담당자 계정 관리</h1>
-        <a href="/admin" className="text-sm text-blue-600 underline">← 관리자</a>
+    <div className="max-w-2xl mx-auto px-6 py-6">
+      <div className="mb-8">
+        <h1 className="text-xl font-bold text-slate-800">담당자 관리</h1>
+        <p className="text-sm text-slate-400 mt-0.5">계정을 추가하고 역할을 관리합니다</p>
       </div>
 
-      <form onSubmit={handleCreate} className="bg-gray-50 rounded-lg p-4 mb-6 space-y-3">
-        <h2 className="font-semibold text-sm">새 계정 추가</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            className="border rounded px-3 py-2 text-sm"
-            placeholder="이름"
-            value={form.name}
-            onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-            required
-          />
-          <input
-            type="email"
-            className="border rounded px-3 py-2 text-sm"
-            placeholder="이메일"
-            value={form.email}
-            onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-            required
-          />
-          <input
-            type="password"
-            className="border rounded px-3 py-2 text-sm"
-            placeholder="비밀번호"
-            value={form.password}
-            onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-            required
-          />
-          <select
-            className="border rounded px-3 py-2 text-sm"
-            value={form.role}
-            onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
-          >
-            <option value="assignee">담당자</option>
-            <option value="admin">관리자</option>
-          </select>
-        </div>
-        <button type="submit" className="bg-blue-600 text-white text-sm px-4 py-2 rounded">추가</button>
-        {msg && <p className="text-green-600 text-sm">{msg}</p>}
-      </form>
+      {/* 새 계정 추가 폼 */}
+      <div className="bg-white border border-slate-100 rounded-xl shadow-sm px-5 py-5 mb-6">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">새 계정 추가</h2>
+        <form onSubmit={handleCreate} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+              placeholder="이름"
+              value={form.name}
+              onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+              required
+            />
+            <input
+              type="email"
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+              placeholder="이메일"
+              value={form.email}
+              onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+              required
+            />
+            <input
+              type="password"
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+              placeholder="비밀번호"
+              value={form.password}
+              onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+              required
+            />
+            <select
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              value={form.role}
+              onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
+            >
+              <option value="assignee">담당자</option>
+              <option value="admin">관리자</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50 transition-colors"
+            >
+              {submitting ? "추가 중..." : "계정 추가"}
+            </button>
+            {msg && (
+              <span className={`text-sm font-medium ${msg.type === "ok" ? "text-emerald-500" : "text-red-500"}`}>
+                {msg.text}
+              </span>
+            )}
+          </div>
+        </form>
+      </div>
 
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border px-3 py-2 text-left">이름</th>
-            <th className="border px-3 py-2 text-left">이메일</th>
-            <th className="border px-3 py-2 text-left">역할</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map(u => (
-            <tr key={u.id}>
-              <td className="border px-3 py-2">{u.name}</td>
-              <td className="border px-3 py-2">{u.email}</td>
-              <td className="border px-3 py-2">{u.role === "admin" ? "관리자" : "담당자"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* 계정 목록 */}
+      <div className="space-y-2">
+        {users.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-sm">등록된 계정이 없습니다</div>
+        ) : (
+          users.map(u => (
+            <div
+              key={u.id}
+              className="bg-white border border-slate-100 rounded-xl px-5 py-4 flex items-center justify-between gap-4 shadow-sm"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center shrink-0">
+                  <span className="text-slate-500 text-xs font-semibold">{u.name.slice(0, 1)}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{u.name}</p>
+                  <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                </div>
+              </div>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-md border shrink-0 ${ROLE_COLOR[u.role] ?? ROLE_COLOR.assignee}`}>
+                {ROLE_LABEL[u.role] ?? u.role}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
