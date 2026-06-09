@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  password      String
+  role          String         @default("assignee")
+  taskTypes     String         @default("[]")
+  tasks         Task[]
+  notifications Notification[]
+  routingRules  RoutingRule[]
+  createdAt     DateTime       @default(now())
+}
+
+model Email {
+  id         String   @id @default(cuid())
+  gmailId    String   @unique
+  from       String
+  subject    String
+  body       String
+  receivedAt DateTime
+  status     String   @default("pending")
+  tasks      Task[]
+  createdAt  DateTime @default(now())
+}
+
+model Task {
+  id             String         @id @default(cuid())
+  emailId        String
+  email          Email          @relation(fields: [emailId], references: [id])
+  title          String
+  description    String
+  taskType       String
+  assigneeId     String
+  assignee       User           @relation(fields: [assigneeId], references: [id])
+  deadline       DateTime?
+  status         String         @default("pending")
+  completedAt    DateTime?
+  completionNote String?
+  notifications  Notification[]
+  createdAt      DateTime       @default(now())
+}
+
+model RoutingRule {
+  id                String @id @default(cuid())
+  taskType          String @unique
+  defaultAssigneeId String
+  defaultAssignee   User   @relation(fields: [defaultAssigneeId], references: [id])
+}
+
+model Notification {
+  id     String   @id @default(cuid())
+  taskId String
+  task   Task     @relation(fields: [taskId], references: [id])
+  userId String
+  user   User     @relation(fields: [userId], references: [id])
+  sentAt DateTime @default(now())
+  type   String
+}
