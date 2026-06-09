@@ -7,19 +7,25 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    })
-    if (result?.error) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.")
-    } else {
-      router.push("/dashboard")
+    setLoading(true)
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      })
+      if (result?.error) {
+        setError("이메일 또는 비밀번호가 올바르지 않습니다.")
+      } else {
+        router.push("/dashboard")
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -44,8 +50,8 @@ export default function LoginPage() {
           className="w-full border rounded px-3 py-2 text-sm"
           required
         />
-        <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded text-sm font-medium">
-          로그인
+        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded text-sm font-medium disabled:opacity-60">
+          {loading ? "로그인 중..." : "로그인"}
         </button>
       </form>
     </div>
