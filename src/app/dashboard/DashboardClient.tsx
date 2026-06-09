@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
+import { signOut } from "next-auth/react"
 
 type Task = {
   id: string
@@ -17,7 +18,7 @@ function daysLeft(deadline: string | null): number | null {
   return Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 }
 
-export default function DashboardClient({ role }: { role: string }) {
+export default function DashboardClient({ role, userName }: { role: string; userName: string }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [completionNote, setCompletionNote] = useState<Record<string, string>>({})
 
@@ -40,11 +41,26 @@ export default function DashboardClient({ role }: { role: string }) {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">내 업무 목록</h1>
-        {role === "admin" && (
-          <a href="/admin" className="text-sm text-blue-600 underline">관리자 페이지 →</a>
-        )}
+        <div>
+          <h1 className="text-2xl font-bold">내 업무 목록</h1>
+          <p className="text-sm text-gray-500 mt-1">{userName} ({role === "admin" ? "관리자" : "담당자"})</p>
+        </div>
+        <div className="flex gap-2">
+          {role === "admin" && (
+            <a href="/admin" className="text-sm border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50">관리자 페이지</a>
+          )}
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="text-sm border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50"
+          >
+            로그아웃
+          </button>
+        </div>
       </div>
+
+      {pending.length === 0 && done.length === 0 && (
+        <p className="text-gray-400 text-sm text-center py-12">배정된 업무가 없습니다.</p>
+      )}
 
       <div className="space-y-3">
         {pending.map(task => {
