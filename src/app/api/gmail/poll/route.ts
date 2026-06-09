@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
-import { listNewEmails } from "@/lib/services/gmail"
+import { listNewEmails, markAsRead } from "@/lib/services/gmail"
 import { parseEmail } from "@/lib/services/claude"
 import { assignTasks } from "@/lib/services/routing"
 import { createTasksFromEmail } from "@/lib/services/tasks"
@@ -20,7 +20,21 @@ export async function GET(request: Request) {
 
   for (const raw of newEmails) {
     const parsedTasks = await parseEmail(raw.subject, raw.body)
-    if (parsedTasks.length === 0) continue
+
+    if (parsedTasks.length === 0) {
+      await prisma.email.create({
+        data: {
+          gmailId: raw.gmailId,
+          from: raw.from,
+          subject: raw.subject,
+          body: raw.body,
+          receivedAt: raw.receivedAt,
+          status: "skipped",
+        },
+      })
+      try { await markAsRead(raw.gmailId) } catch { /* Gmail API 실패 무시 */ }
+      continue
+    }
 
     const assignedTasks = await assignTasks(parsedTasks)
     const emailId = await createTasksFromEmail(raw, assignedTasks)
@@ -40,6 +54,8 @@ export async function GET(request: Request) {
         )
       } catch { /* 알림 실패해도 폴링은 계속 */ }
     }
+
+    try { await markAsRead(raw.gmailId) } catch { /* Gmail API 실패 무시 */ }
     processed++
   }
 

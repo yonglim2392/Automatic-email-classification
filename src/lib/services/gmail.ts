@@ -94,16 +94,63 @@ export async function sendEmail(to: string, subject: string, body: string): Prom
   })
 }
 
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|div|tr|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 function extractBody(payload: gmail_v1.Schema$MessagePart | undefined | null): string {
   if (!payload) return ""
+
   if (payload.mimeType === "text/plain" && payload.body?.data) {
     return Buffer.from(payload.body.data, "base64").toString("utf-8")
   }
+  if (payload.mimeType === "text/html" && payload.body?.data) {
+    return stripHtml(Buffer.from(payload.body.data, "base64").toString("utf-8"))
+  }
+
   if (payload.parts) {
+    // text/plain 우선
+    for (const part of payload.parts) {
+      if (part.mimeType === "text/plain") {
+        const text = extractBody(part)
+        if (text) return text
+      }
+    }
+    // multipart 재귀
+    for (const part of payload.parts) {
+      if (part.mimeType?.startsWith("multipart/")) {
+        const text = extractBody(part)
+        if (text) return text
+      }
+    }
+    // html fallback
     for (const part of payload.parts) {
       const text = extractBody(part)
       if (text) return text
     }
   }
   return ""
+}
+
+export async function markAsRead(gmailId: string): Promise<void> {
+  const gmail = getGmailClient()
+  await gmail.users.messages.modify({
+    userId: "me",
+    id: gmailId,
+    requestBody: { removeLabelIds: ["UNREAD"] },
+  })
 }

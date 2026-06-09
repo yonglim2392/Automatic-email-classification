@@ -68,6 +68,7 @@ export async function getTasksNearDeadline() {
     where: {
       status: { not: "done" },
       deadline: { lte: threeDaysLater, gte: new Date() },
+      notifications: { none: { type: "deadline_warning" } },
     },
     include: { assignee: true, email: true },
   })
