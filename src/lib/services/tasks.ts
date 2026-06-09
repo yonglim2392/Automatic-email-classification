@@ -38,9 +38,11 @@ export async function completeTask(
   taskId: string,
   userId: string,
   completionNote: string | null,
+  isAdmin = false,
 ): Promise<void> {
   const task = await prisma.task.findUnique({ where: { id: taskId } })
-  if (!task || task.assigneeId !== userId) throw new Error("권한 없음")
+  if (!task) throw new Error("권한 없음")
+  if (!isAdmin && task.assigneeId !== userId) throw new Error("권한 없음")
 
   await prisma.task.update({
     where: { id: taskId },

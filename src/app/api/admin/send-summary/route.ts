@@ -13,6 +13,9 @@ export async function POST(request: Request) {
 
   const email = await prisma.email.findUnique({ where: { id: emailId } })
   if (!email) return NextResponse.json({ error: "Not found" }, { status: 404 })
+  if (email.status === "completed") {
+    return NextResponse.json({ error: "이미 발송된 이메일입니다." }, { status: 409 })
+  }
 
   await sendEmail(email.from, subject, body)
 

@@ -39,12 +39,34 @@ export default function DashboardClient({ userName }: { userName: string }) {
   const [loading, setLoading] = useState(true)
   const [completionNote, setCompletionNote] = useState<Record<string, string>>({})
   const [completing, setCompleting] = useState<Set<string>>(new Set())
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetch("/api/tasks")
       .then(r => r.json())
-      .then(data => { setTasks(data); setLoading(false) })
+      .then((data: Task[]) => {
+        setTasks(data)
+        setLoading(false)
+        // 최근 2개 날짜만 펼치고 나머지 접기
+        const done = data.filter(t => t.status === "done" && t.completedAt)
+        const dateMap = new Map<string, number>()
+        for (const t of done) {
+          const key = new Date(t.completedAt!).toLocaleDateString("ko-KR")
+          const ts = new Date(t.completedAt!).getTime()
+          if (!dateMap.has(key) || dateMap.get(key)! < ts) dateMap.set(key, ts)
+        }
+        const sorted = [...dateMap.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])
+        if (sorted.length > 2) setCollapsedDates(new Set(sorted.slice(2)))
+      })
   }, [])
+
+  function toggleDate(date: string) {
+    setCollapsedDates(prev => {
+      const next = new Set(prev)
+      next.has(date) ? next.delete(date) : next.add(date)
+      return next
+    })
+  }
 
   async function handleComplete(taskId: string) {
     if (completing.has(taskId)) return
@@ -192,13 +214,21 @@ export default function DashboardClient({ userName }: { userName: string }) {
               <div className="mt-10">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">완료된 업무</p>
                 <div className="space-y-5">
-                  {sortedDates.map(date => (
+                  {sortedDates.map(date => {
+                    const isCollapsed = collapsedDates.has(date)
+                    return (
                     <div key={date}>
-                      <div className="flex items-center gap-2 mb-2">
+                      <div
+                        className="flex items-center gap-2 mb-2 cursor-pointer select-none group"
+                        onClick={() => toggleDate(date)}
+                      >
                         <p className="text-xs font-semibold text-gray-500">{date}</p>
                         <span className="text-xs text-gray-300">{doneByDate[date].length}건</span>
+                        <span className="ml-auto text-gray-300 text-xs group-hover:text-gray-400">
+                          {isCollapsed ? "▼" : "▲"}
+                        </span>
                       </div>
-                      <div className="space-y-1.5">
+                      {!isCollapsed && <div className="space-y-1.5">
                         {doneByDate[date].map(task => (
                           <div key={task.id} className="bg-white border border-gray-100 rounded-lg px-4 py-3">
                             <div className="flex items-start gap-3">
@@ -218,9 +248,10 @@ export default function DashboardClient({ userName }: { userName: string }) {
                             </div>
                           </div>
                         ))}
-                      </div>
+                      </div>}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

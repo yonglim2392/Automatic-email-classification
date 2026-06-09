@@ -22,10 +22,15 @@ type EmailGroup = {
   tasks: Task[]
 }
 
+type BuyerGroup = {
+  buyerKey: string
+  buyerName: string
+  buyerEmail: string
+  emails: EmailGroup[]
+}
+
 type Assignee = { id: string; name: string }
-
 type PreviewData = { emailId: string; to: string; subject: string; body: string }
-
 type StatusFilter = "all" | "processed" | "ready" | "completed"
 
 function extractSenderName(from: string) {
@@ -71,12 +76,14 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   const [groups, setGroups] = useState<EmailGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [expandedBuyers, setExpandedBuyers] = useState<Set<string>>(new Set())
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
   const [polling, setPolling] = useState(false)
   const [pollResult, setPollResult] = useState<string | null>(null)
   const [sending, setSending] = useState<Set<string>>(new Set())
   const [previewing, setPreviewing] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<PreviewData | null>(null)
-  const [view, setView] = useState<"email" | "date">("email")
+  const [view, setView] = useState<"buyer" | "date">("buyer")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
   function loadTasks() {
@@ -100,11 +107,27 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
         const newGroups = Array.from(map.values())
         setGroups(newGroups)
         setLoading(false)
-        setExpanded(prev => {
-          const next = new Set(prev)
-          newGroups.filter(g => g.emailStatus === "ready").forEach(g => next.add(g.emailId))
-          return next
-        })
+
+        // 발송 대기 이메일 자동 펼침
+        const readyEmailIds = new Set(newGroups.filter(g => g.emailStatus === "ready").map(g => g.emailId))
+        setExpanded(readyEmailIds)
+
+        // 발송 대기 이메일이 있는 바이어 자동 펼침
+        const readyBuyers = new Set(
+          newGroups.filter(g => g.emailStatus === "ready").map(g => extractEmail(g.from).toLowerCase())
+        )
+        setExpandedBuyers(readyBuyers)
+
+        // 날짜별 뷰: 최근 2개 날짜만 펼치고 나머지 접기
+        const doneTasks = newGroups.flatMap(g => g.tasks.filter(t => t.status === "done" && t.completedAt))
+        const dateMap = new Map<string, number>()
+        for (const t of doneTasks) {
+          const key = new Date(t.completedAt!).toLocaleDateString("ko-KR")
+          const ts = new Date(t.completedAt!).getTime()
+          if (!dateMap.has(key) || dateMap.get(key)! < ts) dateMap.set(key, ts)
+        }
+        const datesOrdered = [...dateMap.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])
+        if (datesOrdered.length > 2) setCollapsedDates(new Set(datesOrdered.slice(2)))
       })
   }
 
@@ -114,6 +137,22 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     setExpanded(prev => {
       const next = new Set(prev)
       next.has(emailId) ? next.delete(emailId) : next.add(emailId)
+      return next
+    })
+  }
+
+  function toggleBuyer(buyerKey: string) {
+    setExpandedBuyers(prev => {
+      const next = new Set(prev)
+      next.has(buyerKey) ? next.delete(buyerKey) : next.add(buyerKey)
+      return next
+    })
+  }
+
+  function toggleDate(date: string) {
+    setCollapsedDates(prev => {
+      const next = new Set(prev)
+      next.has(date) ? next.delete(date) : next.add(date)
       return next
     })
   }
@@ -186,18 +225,47 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     }
   }
 
-  const totalEmails = groups.length
+  // 통계
+  const totalEmails = groups.filter(g => g.emailStatus !== "skipped").length
   const inProgressEmails = groups.filter(g => g.emailStatus === "processed").length
   const readyEmails = groups.filter(g => g.emailStatus === "ready").length
   const completedEmails = groups.filter(g => g.emailStatus === "completed").length
 
-  // 이메일별 뷰 필터
-  const filteredGroups = statusFilter === "all"
-    ? groups
-    : groups.filter(g => g.emailStatus === statusFilter)
+  const FILTER_OPTIONS: { value: StatusFilter; label: string; count: number }[] = [
+    { value: "all", label: "전체", count: totalEmails },
+    { value: "processed", label: "진행 중", count: inProgressEmails },
+    { value: "ready", label: "발송 대기", count: readyEmails },
+    { value: "completed", label: "발송 완료", count: completedEmails },
+  ]
 
-  // 날짜별 뷰
-  const allTasks = groups.flatMap(g => g.tasks.map(t => ({ ...t, emailFrom: g.from, emailSubject: g.subject })))
+  // 바이어별 그룹
+  const visibleGroups = groups.filter(g => g.emailStatus !== "skipped")
+  const filteredGroups = statusFilter === "all" ? visibleGroups : visibleGroups.filter(g => g.emailStatus === statusFilter)
+
+  const buyerMap = new Map<string, BuyerGroup>()
+  for (const group of filteredGroups) {
+    const key = extractEmail(group.from).toLowerCase()
+    if (!buyerMap.has(key)) {
+      buyerMap.set(key, {
+        buyerKey: key,
+        buyerName: extractSenderName(group.from),
+        buyerEmail: extractEmail(group.from),
+        emails: [],
+      })
+    }
+    buyerMap.get(key)!.emails.push(group)
+  }
+  const buyers = [...buyerMap.values()].sort((a, b) => {
+    const aReady = a.emails.some(e => e.emailStatus === "ready")
+    const bReady = b.emails.some(e => e.emailStatus === "ready")
+    if (aReady !== bReady) return aReady ? -1 : 1
+    const aLatest = Math.max(...a.emails.map(e => new Date(e.receivedAt).getTime()))
+    const bLatest = Math.max(...b.emails.map(e => new Date(e.receivedAt).getTime()))
+    return bLatest - aLatest
+  })
+
+  // 날짜별
+  const allTasks = visibleGroups.flatMap(g => g.tasks.map(t => ({ ...t, emailFrom: g.from, emailSubject: g.subject })))
   const pendingTasks = allTasks.filter(t => t.status !== "done")
   const doneTasks = allTasks.filter(t => t.status === "done" && t.completedAt)
   const tasksByDate: Record<string, typeof doneTasks> = {}
@@ -208,12 +276,95 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   }
   const sortedDates = Object.keys(tasksByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
 
-  const FILTER_OPTIONS: { value: StatusFilter; label: string; count: number }[] = [
-    { value: "all", label: "전체", count: totalEmails },
-    { value: "processed", label: "진행 중", count: inProgressEmails },
-    { value: "ready", label: "발송 대기", count: readyEmails },
-    { value: "completed", label: "발송 완료", count: completedEmails },
-  ]
+  // 이메일 아코디언 (바이어 뷰 내에서 공용)
+  function renderEmailAccordion(group: EmailGroup) {
+    const isOpen = expanded.has(group.emailId)
+    const doneCount = group.tasks.filter(t => t.status === "done").length
+    return (
+      <div key={group.emailId} className="bg-white border rounded-xl overflow-hidden border-gray-200 shadow-sm">
+        <div
+          onClick={() => toggleExpand(group.emailId)}
+          className="w-full text-left px-4 py-3.5 hover:bg-gray-50 transition-colors cursor-pointer select-none"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${EMAIL_STATUS_STYLE[group.emailStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                  {EMAIL_STATUS_LABEL[group.emailStatus] ?? group.emailStatus}
+                </span>
+                <span className="text-xs text-gray-400">{doneCount}/{group.tasks.length} 완료</span>
+                <span className="text-xs text-gray-300 hidden sm:inline">·</span>
+                <span className="text-xs text-gray-400 hidden sm:inline">
+                  {new Date(group.receivedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+              <p className="font-medium text-gray-800 truncate text-sm">{group.subject}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {group.emailStatus === "ready" && (
+                <button
+                  onClick={e => { e.stopPropagation(); handlePreviewSummary(group.emailId) }}
+                  disabled={previewing.has(group.emailId)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-colors"
+                >
+                  {previewing.has(group.emailId) ? "불러오는 중..." : "📤 메일 발송"}
+                </button>
+              )}
+              {group.emailStatus === "completed" && (
+                <span className="text-xs text-green-600 font-medium">✅ 완료</span>
+              )}
+              <span className="text-gray-300 text-xs">{isOpen ? "▲" : "▼"}</span>
+            </div>
+          </div>
+        </div>
+        {isOpen && (
+          <div className="divide-y divide-gray-50 border-t border-gray-100">
+            {group.tasks.map(task => (
+              <div key={task.id} className="px-4 py-3 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${task.status === "done" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                      {task.status === "done" ? "완료" : "대기"}
+                    </span>
+                    <span className="text-xs text-gray-400">{task.taskType}</span>
+                    {task.deadline && task.status !== "done" && (
+                      <span className="text-xs text-orange-500">마감 {formatDeadline(task.deadline)}</span>
+                    )}
+                  </div>
+                  <p className={`text-sm font-medium ${task.status === "done" ? "text-gray-400 line-through" : "text-gray-800"}`}>
+                    {task.title}
+                  </p>
+                  {task.completionNote && (
+                    <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
+                      <p className="text-xs text-gray-500">{task.completionNote}</p>
+                    </div>
+                  )}
+                  {task.completedAt && (
+                    <p className="text-xs text-gray-400 mt-1">완료 {formatDateTime(task.completedAt)}</p>
+                  )}
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-medium text-gray-700">{task.assignee.name}</p>
+                  {task.status !== "done" && (
+                    <select
+                      className="text-xs border border-gray-200 rounded-md px-1.5 py-1 mt-1 text-gray-600 bg-white"
+                      onChange={e => handleReassign(task.id, e.target.value)}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>재배정</option>
+                      {assignees.map(a => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="h-full">
@@ -258,10 +409,10 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
           </div>
           <div className="flex bg-gray-100 rounded-lg p-0.5 text-sm">
             <button
-              onClick={() => setView("email")}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${view === "email" ? "bg-white shadow text-gray-800" : "text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setView("buyer")}
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${view === "buyer" ? "bg-white shadow text-gray-800" : "text-gray-500 hover:text-gray-700"}`}
             >
-              이메일별
+              바이어별
             </button>
             <button
               onClick={() => setView("date")}
@@ -280,10 +431,107 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
           </div>
         )}
 
+        {/* 바이어별 뷰 */}
+        {!loading && view === "buyer" && (
+          <div>
+            {/* 상태 필터 */}
+            {visibleGroups.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {FILTER_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setStatusFilter(opt.value)}
+                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
+                      statusFilter === opt.value
+                        ? "bg-gray-800 text-white border-gray-800"
+                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    {opt.label}
+                    {opt.count > 0 && (
+                      <span className={`ml-1.5 ${statusFilter === opt.value ? "text-gray-300" : "text-gray-400"}`}>
+                        {opt.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {buyers.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 text-sm border-2 border-dashed rounded-xl">
+                {visibleGroups.length === 0
+                  ? <>아직 처리된 이메일이 없습니다.<br />위 버튼으로 이메일을 가져오세요.</>
+                  : "해당 상태의 이메일이 없습니다."}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {buyers.map(buyer => {
+                  const isOpen = expandedBuyers.has(buyer.buyerKey)
+                  const allTasks = buyer.emails.flatMap(e => e.tasks)
+                  const doneCnt = allTasks.filter(t => t.status === "done").length
+                  const hasReady = buyer.emails.some(e => e.emailStatus === "ready")
+                  const hasProcessed = buyer.emails.some(e => e.emailStatus === "processed")
+                  const initial = buyer.buyerName.slice(0, 1)
+
+                  return (
+                    <div key={buyer.buyerKey} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      {/* 바이어 헤더 */}
+                      <div
+                        onClick={() => toggleBuyer(buyer.buyerKey)}
+                        className="px-4 py-3.5 flex items-center gap-3 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                          <span className="text-indigo-600 text-sm font-semibold">{initial}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-gray-800 text-sm truncate">{buyer.buyerName}</p>
+                            <span className="text-xs text-gray-400 truncate hidden sm:inline">{buyer.buyerEmail}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-xs text-gray-400">이메일 {buyer.emails.length}개</span>
+                            <span className="text-xs text-gray-300">·</span>
+                            <span className="text-xs text-gray-400">태스크 {doneCnt}/{allTasks.length} 완료</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {hasReady && (
+                            <span className="text-xs bg-orange-100 text-orange-600 font-medium px-2 py-0.5 rounded-full">
+                              발송 대기
+                            </span>
+                          )}
+                          {!hasReady && hasProcessed && (
+                            <span className="text-xs bg-blue-50 text-blue-500 font-medium px-2 py-0.5 rounded-full">
+                              진행 중
+                            </span>
+                          )}
+                          {!hasReady && !hasProcessed && (
+                            <span className="text-xs bg-green-50 text-green-600 font-medium px-2 py-0.5 rounded-full">
+                              완료
+                            </span>
+                          )}
+                          <span className="text-gray-300 text-xs">{isOpen ? "▲" : "▼"}</span>
+                        </div>
+                      </div>
+
+                      {/* 이메일 목록 */}
+                      {isOpen && (
+                        <div className="border-t border-gray-100 px-4 py-3 space-y-2 bg-gray-50/50">
+                          {buyer.emails.map(group => renderEmailAccordion(group))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 날짜별 처리 현황 */}
         {!loading && view === "date" && (
           <div>
-            {/* 미완료 업무 */}
             {pendingTasks.length > 0 && (
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
@@ -313,170 +561,45 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
               </div>
             )}
 
-            {/* 날짜별 완료 */}
             {sortedDates.length === 0 && pendingTasks.length === 0 ? (
               <div className="text-center py-16 text-gray-400 text-sm border-2 border-dashed rounded-xl">
                 처리된 업무가 없습니다.
               </div>
             ) : (
-              <div className="space-y-6">
-                {sortedDates.map(date => (
-                  <div key={date}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <p className="text-sm font-semibold text-gray-600">{date}</p>
-                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{tasksByDate[date].length}건 처리</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {tasksByDate[date].map(task => (
-                        <div key={task.id} className="bg-white border border-gray-100 rounded-lg px-4 py-3 flex items-start gap-3">
-                          <span className="text-green-400 shrink-0 mt-0.5">✓</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-700">{task.title}</p>
-                            <p className="text-xs text-gray-400 truncate mt-0.5">
-                              {extractSenderName(task.emailFrom)} · {task.emailSubject}
-                            </p>
-                            {task.completionNote && (
-                              <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
-                                <p className="text-xs text-gray-500">{task.completionNote}</p>
-                              </div>
-                            )}
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-xs font-medium text-gray-600">{task.assignee.name}</p>
-                            <p className="text-xs text-gray-400">{task.taskType}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 이메일별 accordion */}
-        {!loading && view === "email" && (
-          <div>
-            {/* 상태 필터 */}
-            {groups.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {FILTER_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setStatusFilter(opt.value)}
-                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
-                      statusFilter === opt.value
-                        ? "bg-gray-800 text-white border-gray-800"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"
-                    }`}
-                  >
-                    {opt.label}
-                    {opt.count > 0 && (
-                      <span className={`ml-1.5 ${statusFilter === opt.value ? "text-gray-300" : "text-gray-400"}`}>
-                        {opt.count}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {groups.length === 0 ? (
-              <div className="text-center py-16 text-gray-400 text-sm border-2 border-dashed rounded-xl">
-                아직 처리된 이메일이 없습니다.<br />위 버튼으로 이메일을 가져오세요.
-              </div>
-            ) : filteredGroups.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 text-sm border-2 border-dashed rounded-xl">
-                해당 상태의 이메일이 없습니다.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredGroups.map(group => {
-                  const isOpen = expanded.has(group.emailId)
-                  const doneCount = group.tasks.filter(t => t.status === "done").length
-
+              <div className="space-y-5">
+                {sortedDates.map(date => {
+                  const isCollapsed = collapsedDates.has(date)
                   return (
-                    <div key={group.emailId} className="bg-white border rounded-xl overflow-hidden border-gray-200 shadow-sm">
+                    <div key={date}>
                       <div
-                        onClick={() => toggleExpand(group.emailId)}
-                        className="w-full text-left px-4 py-3.5 hover:bg-gray-50 transition-colors cursor-pointer select-none"
+                        className="flex items-center gap-2 mb-2 cursor-pointer select-none group"
+                        onClick={() => toggleDate(date)}
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${EMAIL_STATUS_STYLE[group.emailStatus] ?? "bg-gray-100 text-gray-600"}`}>
-                                {EMAIL_STATUS_LABEL[group.emailStatus] ?? group.emailStatus}
-                              </span>
-                              <span className="text-xs text-gray-400">{doneCount}/{group.tasks.length} 완료</span>
-                              <span className="text-xs text-gray-300 hidden sm:inline">·</span>
-                              <span className="text-xs text-gray-400 hidden sm:inline">
-                                {new Date(group.receivedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            </div>
-                            <p className="font-medium text-gray-800 truncate">{group.subject}</p>
-                            <p className="text-sm text-gray-500 truncate">
-                              {extractSenderName(group.from)} &lt;{extractEmail(group.from)}&gt;
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {group.emailStatus === "ready" && (
-                              <button
-                                onClick={e => { e.stopPropagation(); handlePreviewSummary(group.emailId) }}
-                                disabled={previewing.has(group.emailId)}
-                                className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-colors"
-                              >
-                                {previewing.has(group.emailId) ? "불러오는 중..." : "📤 메일 발송"}
-                              </button>
-                            )}
-                            {group.emailStatus === "completed" && (
-                              <span className="text-xs text-green-600 font-medium">✅ 완료</span>
-                            )}
-                            <span className="text-gray-300 text-xs">{isOpen ? "▲" : "▼"}</span>
-                          </div>
-                        </div>
+                        <p className="text-sm font-semibold text-gray-600">{date}</p>
+                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{tasksByDate[date].length}건 처리</span>
+                        <span className="ml-auto text-gray-300 text-xs group-hover:text-gray-400">
+                          {isCollapsed ? "▼" : "▲"}
+                        </span>
                       </div>
-
-                      {isOpen && (
-                        <div className="divide-y divide-gray-50 border-t border-gray-100">
-                          {group.tasks.map(task => (
-                            <div key={task.id} className="px-4 py-3 flex items-start gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${task.status === "done" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                                    {task.status === "done" ? "완료" : "대기"}
-                                  </span>
-                                  <span className="text-xs text-gray-400">{task.taskType}</span>
-                                  {task.deadline && task.status !== "done" && (
-                                    <span className="text-xs text-orange-500">마감 {formatDeadline(task.deadline)}</span>
-                                  )}
-                                </div>
-                                <p className={`text-sm font-medium ${task.status === "done" ? "text-gray-400 line-through" : "text-gray-800"}`}>
-                                  {task.title}
+                      {!isCollapsed && (
+                        <div className="space-y-1.5">
+                          {tasksByDate[date].map(task => (
+                            <div key={task.id} className="bg-white border border-gray-100 rounded-lg px-4 py-3 flex items-start gap-3">
+                              <span className="text-green-400 shrink-0 mt-0.5">✓</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-700">{task.title}</p>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">
+                                  {extractSenderName(task.emailFrom)} · {task.emailSubject}
                                 </p>
                                 {task.completionNote && (
                                   <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
                                     <p className="text-xs text-gray-500">{task.completionNote}</p>
                                   </div>
                                 )}
-                                {task.completedAt && (
-                                  <p className="text-xs text-gray-400 mt-1">완료 {formatDateTime(task.completedAt)}</p>
-                                )}
                               </div>
                               <div className="shrink-0 text-right">
-                                <p className="text-sm font-medium text-gray-700">{task.assignee.name}</p>
-                                {task.status !== "done" && (
-                                  <select
-                                    className="text-xs border border-gray-200 rounded-md px-1.5 py-1 mt-1 text-gray-600 bg-white"
-                                    onChange={e => handleReassign(task.id, e.target.value)}
-                                    defaultValue=""
-                                  >
-                                    <option value="" disabled>재배정</option>
-                                    {assignees.map(a => (
-                                      <option key={a.id} value={a.id}>{a.name}</option>
-                                    ))}
-                                  </select>
-                                )}
+                                <p className="text-xs font-medium text-gray-600">{task.assignee.name}</p>
+                                <p className="text-xs text-gray-400">{task.taskType}</p>
                               </div>
                             </div>
                           ))}
