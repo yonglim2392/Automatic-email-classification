@@ -80,7 +80,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
     })
   const done = tasks.filter(t => t.status === "done")
 
-  // 완료 업무 일자별 그룹핑
+  // 완료 업무 일자별 그룹핑 (최신 날짜 먼저)
   const doneByDate: Record<string, Task[]> = {}
   for (const t of done) {
     const dateKey = t.completedAt
@@ -89,6 +89,11 @@ export default function DashboardClient({ userName }: { userName: string }) {
     if (!doneByDate[dateKey]) doneByDate[dateKey] = []
     doneByDate[dateKey].push(t)
   }
+  const sortedDates = Object.keys(doneByDate).sort((a, b) => {
+    if (a === "날짜 미상") return 1
+    if (b === "날짜 미상") return -1
+    return new Date(b).getTime() - new Date(a).getTime()
+  })
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -163,17 +168,20 @@ export default function DashboardClient({ userName }: { userName: string }) {
       )}
 
       {/* 완료 업무 일자별 */}
-      {Object.keys(doneByDate).length > 0 && (
+      {sortedDates.length > 0 && (
         <div className="mt-10">
           <h2 className="text-base font-semibold text-gray-500 mb-4">완료된 업무</h2>
           <div className="space-y-6">
-            {Object.entries(doneByDate).map(([date, dateTasks]) => (
+            {sortedDates.map(date => (
               <div key={date}>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{date}</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-xs font-semibold text-gray-400 tracking-wide">{date}</p>
+                  <span className="text-xs text-gray-300">{doneByDate[date].length}건</span>
+                </div>
                 <div className="space-y-2">
-                  {dateTasks.map(task => (
+                  {doneByDate[date].map(task => (
                     <div key={task.id} className="border border-gray-100 rounded-lg p-3 bg-gray-50 flex items-start gap-3">
-                      <span className="text-green-500 mt-0.5">✓</span>
+                      <span className="text-green-500 mt-0.5 shrink-0">✓</span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-500 line-through">{task.title}</p>
                         <p className="text-xs text-gray-400 truncate">
@@ -181,7 +189,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
                           {task.completionNote && ` · "${task.completionNote}"`}
                         </p>
                       </div>
-                      <span className="text-xs text-gray-400 shrink-0">{task.taskType}</span>
+                      <span className="text-xs text-gray-300 shrink-0">{task.taskType}</span>
                     </div>
                   ))}
                 </div>
