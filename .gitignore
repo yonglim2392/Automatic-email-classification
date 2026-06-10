@@ -48,3 +48,6 @@ next-env.d.ts
 
 /src/generated/prisma
 .gstack/qa-reports/dev-server.log
+send_test_email.py
+email_config.py
+scripts/clear-data.mjs
