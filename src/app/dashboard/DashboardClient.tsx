@@ -47,12 +47,12 @@ export default function DashboardClient({ userName }: { userName: string }) {
       .then((data: Task[]) => {
         setTasks(data)
         setLoading(false)
-        // 최근 2개 날짜만 펼치고 나머지 접기
-        const done = data.filter(t => t.status === "done" && t.completedAt)
+        // 날짜 그룹 초기화 (receivedAt 기준, 모두 접힘)
+        const done = data.filter(t => t.status === "done")
         const dateMap = new Map<string, number>()
         for (const t of done) {
-          const key = new Date(t.completedAt!).toLocaleDateString("ko-KR")
-          const ts = new Date(t.completedAt!).getTime()
+          const key = new Date(t.email.receivedAt).toLocaleDateString("ko-KR")
+          const ts = new Date(t.email.receivedAt).getTime()
           if (!dateMap.has(key) || dateMap.get(key)! < ts) dateMap.set(key, ts)
         }
         const sorted = [...dateMap.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])
@@ -100,12 +100,12 @@ export default function DashboardClient({ userName }: { userName: string }) {
     })
   const done = tasks.filter(t => t.status === "done")
 
-  // 완료 업무: 날짜 → 이메일 → 태스크
+  // 완료 업무: 날짜(receivedAt 기준) → 이메일 → 태스크
   type EmailGroup = { from: string; subject: string; tasks: Task[] }
   const doneByDate: Record<string, { ts: number; emails: Record<string, EmailGroup> }> = {}
   for (const t of done) {
-    const ts = new Date(t.completedAt!).getTime()
-    const dateKey = new Date(t.completedAt!).toLocaleDateString("ko-KR")
+    const ts = new Date(t.email.receivedAt).getTime()
+    const dateKey = new Date(t.email.receivedAt).toLocaleDateString("ko-KR")
     const emailId = t.email.id
     if (!doneByDate[dateKey]) doneByDate[dateKey] = { ts, emails: {} }
     if (doneByDate[dateKey].ts < ts) doneByDate[dateKey].ts = ts
