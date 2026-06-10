@@ -1,5 +1,7 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useToast } from "@/hooks/useToast"
+import { ToastContainer } from "@/components/ToastContainer"
 
 type Attachment = {
   id: string
@@ -50,6 +52,21 @@ type Assignee = { id: string; name: string }
 type PreviewData = { emailId: string; to: string; subject: string; body: string }
 type StatusFilter = "all" | "processed" | "ready" | "completed"
 
+function SkeletonEmailCard() {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm animate-pulse">
+      <div className="px-4 py-3.5 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-gray-200 shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-3.5 bg-gray-200 rounded w-1/3" />
+          <div className="h-3 bg-gray-100 rounded w-1/2" />
+        </div>
+        <div className="w-14 h-5 bg-gray-200 rounded-full" />
+      </div>
+    </div>
+  )
+}
+
 function extractSenderName(from: string) {
   const match = from.match(/^(.+?)\s*</)
   return match ? match[1].trim().replace(/^"|"$/g, "") : from
@@ -98,6 +115,8 @@ const EMAIL_STATUS_STYLE: Record<string, string> = {
 }
 
 export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
+  const { toasts, toast, dismiss } = useToast()
+  const prevGroupCountRef = useRef<number>(-1)
   const [groups, setGroups] = useState<EmailGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -180,6 +199,12 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
           map.get(task.email.id)!.tasks.push(task)
         }
         const newGroups = Array.from(map.values())
+        const visibleCount = newGroups.filter(g => g.emailStatus !== "skipped").length
+        if (prevGroupCountRef.current >= 0 && visibleCount > prevGroupCountRef.current) {
+          const diff = visibleCount - prevGroupCountRef.current
+          toast(`새 이메일 ${diff}개가 도착했습니다.`, "info")
+        }
+        prevGroupCountRef.current = visibleCount
         setGroups(newGroups)
         setLoading(false)
 
@@ -213,9 +238,10 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        alert(data.error ?? "완료 처리에 실패했습니다.")
+        toast(data.error ?? "완료 처리에 실패했습니다.", "error")
         return
       }
+      toast("완료 처리되었습니다.", "success")
       loadTasks()
     } finally {
       setAdminCompleting(prev => { const s = new Set(prev); s.delete(taskId); return s })
@@ -328,11 +354,17 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     const emailId = preview.emailId
     setSending(prev => new Set([...prev, emailId]))
     try {
-      await fetch("/api/admin/send-summary", {
+      const sendRes = await fetch("/api/admin/send-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emailId, subject: preview.subject, body: preview.body }),
       })
+      if (!sendRes.ok) {
+        const data = await sendRes.json().catch(() => ({}))
+        toast(data.error ?? "메일 발송에 실패했습니다.", "error")
+        return
+      }
+      toast("메일이 발송되었습니다.", "success")
       setPreview(null)
       loadTasks()
     } finally {
@@ -347,10 +379,13 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
       const res = await fetch("/api/admin/poll", { method: "POST" })
       const data = await res.json()
       const failMsg = data.failed > 0 ? ` · ${data.failed}개 실패` : ""
-      setPollResult(`이메일 ${data.total}개 중 ${data.processed}개 처리 완료${failMsg}`)
+      const msg = `이메일 ${data.total}개 중 ${data.processed}개 처리 완료${failMsg}`
+      setPollResult(msg)
+      toast(msg, data.failed > 0 ? "error" : "success")
       loadTasks()
     } catch {
       setPollResult("오류가 발생했습니다.")
+      toast("이메일 가져오기 중 오류가 발생했습니다.", "error")
     } finally {
       setPolling(false)
     }
@@ -605,7 +640,12 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                       )}
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-medium text-gray-700">{task.assignee.name}</p>
+                      <div className="flex items-center justify-end gap-1.5 mb-0.5">
+                        <div className="w-6 h-6 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                          <span className="text-indigo-600 text-xs font-semibold">{task.assignee.name.slice(0, 1)}</span>
+                        </div>
+                        <p className="text-sm font-medium text-gray-700">{task.assignee.name}</p>
+                      </div>
                       {renderTaskControls(task)}
                     </div>
                   </div>
@@ -679,9 +719,8 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
         </div>
 
         {loading && (
-          <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <div className="w-7 h-7 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
-            <p className="text-sm text-gray-400">불러오는 중...</p>
+          <div className="space-y-3">
+            {[0, 1, 2].map(i => <SkeletonEmailCard key={i} />)}
           </div>
         )}
 
@@ -998,6 +1037,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
           </div>
         )}
       </div>
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
     </div>
   )
 }
