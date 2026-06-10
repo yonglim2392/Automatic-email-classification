@@ -10,6 +10,8 @@ type Task = {
   completedAt: string | null
   completionNote: string | null
   completedByName: string | null
+  adminFeedback: string | null
+  adminFeedbackBy: string | null
   email: { id: string; from: string; subject: string; receivedAt: string; status: string }
   assignee: { name: string }
 }
@@ -117,6 +119,12 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   const [editTaskState, setEditTaskState] = useState<EditingTask>({ title: "", description: "", taskType: "" })
   const [savingTask, setSavingTask] = useState(false)
 
+  // 수정 요청 모달
+  type RevisionModal = { taskId: string; taskTitle: string }
+  const [revisionModal, setRevisionModal] = useState<RevisionModal | null>(null)
+  const [revisionNote, setRevisionNote] = useState("")
+  const [requestingRevision, setRequestingRevision] = useState(false)
+
   function loadTasks() {
     fetch("/api/tasks")
       .then(r => r.json())
@@ -171,6 +179,29 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
       setAdminCompleting(prev => { const s = new Set(prev); s.delete(taskId); return s })
       setAdminCompleteMode(prev => { const s = new Set(prev); s.delete(taskId); return s })
       setAdminCompleteNote(prev => { const n = { ...prev }; delete n[taskId]; return n })
+    }
+  }
+
+  async function handleRequestRevision() {
+    if (!revisionModal || requestingRevision) return
+    setRequestingRevision(true)
+    try {
+      await fetch(`/api/tasks/${revisionModal.taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "requestRevision", adminFeedback: revisionNote }),
+      })
+      setGroups(prev => prev.map(g => ({
+        ...g,
+        tasks: g.tasks.map(t => t.id === revisionModal.taskId
+          ? { ...t, status: "pending", completedAt: null, completionNote: null, completedByName: null, adminFeedback: revisionNote, adminFeedbackBy: "관리자" }
+          : t
+        ),
+      })))
+      setRevisionModal(null)
+      setRevisionNote("")
+    } finally {
+      setRequestingRevision(false)
     }
   }
 
@@ -336,7 +367,16 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     }))
 
   function renderTaskControls(task: Task) {
-    if (task.status === "done") return null
+    if (task.status === "done") {
+      return (
+        <button
+          onClick={() => { setRevisionModal({ taskId: task.id, taskTitle: task.title }); setRevisionNote("") }}
+          className="mt-1 text-xs border border-amber-200 text-amber-600 px-2.5 py-1 rounded hover:bg-amber-50 transition-colors"
+        >
+          수정 요청
+        </button>
+      )
+    }
     if (adminCompleteMode.has(task.id)) {
       return (
         <div className="mt-1 space-y-1 min-w-[120px]">
@@ -769,6 +809,41 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                 ) : (
                   <p className="text-sm text-gray-400 text-center py-12">이메일을 불러올 수 없습니다.</p>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 수정 요청 모달 */}
+        {revisionModal && (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setRevisionModal(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-800">수정 요청</h2>
+                <p className="text-sm text-gray-400 mt-0.5 truncate">{revisionModal.taskTitle}</p>
+              </div>
+              <div className="px-5 py-4">
+                <label className="text-xs text-gray-400 block mb-2">담당자에게 전달할 피드백</label>
+                <textarea
+                  value={revisionNote}
+                  onChange={e => setRevisionNote(e.target.value)}
+                  placeholder="예) 선적 일자를 구체적으로 확인하고 B/L 사본도 첨부해주세요."
+                  rows={4}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  autoFocus
+                />
+              </div>
+              <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                <button onClick={() => setRevisionModal(null)} className="px-4 py-2 text-sm border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50">
+                  취소
+                </button>
+                <button
+                  onClick={handleRequestRevision}
+                  disabled={requestingRevision || !revisionNote.trim()}
+                  className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium disabled:opacity-50 transition-colors"
+                >
+                  {requestingRevision ? "요청 중..." : "수정 요청 보내기"}
+                </button>
               </div>
             </div>
           </div>

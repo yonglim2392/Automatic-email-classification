@@ -36,6 +36,33 @@ export async function PATCH(
     return NextResponse.json({ ok: true })
   }
 
+  // 관리자 수정 요청 (requestRevision)
+  if (body.action === "requestRevision") {
+    if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+    await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        status: "pending",
+        adminFeedback: body.adminFeedback ?? "",
+        adminFeedbackBy: session.user.name,
+        completedAt: null,
+        completionNote: null,
+        completedByName: null,
+      },
+    })
+
+    await prisma.email.updateMany({
+      where: { id: task.emailId, status: "ready" },
+      data: { status: "processed" },
+    })
+
+    return NextResponse.json({ ok: true })
+  }
+
   // 완료 메모 수정
   if ("completionNote" in body) {
     const task = await prisma.task.findUnique({ where: { id: taskId } })

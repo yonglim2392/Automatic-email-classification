@@ -12,6 +12,8 @@ type Task = {
   completedAt: string | null
   completionNote: string | null
   completedByName: string | null
+  adminFeedback: string | null
+  adminFeedbackBy: string | null
   email: { id: string; from: string; subject: string; receivedAt: string }
   assignee: { name: string }
 }
@@ -298,7 +300,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-3 group">
+          <div className="flex items-center gap-3">
             <span className="text-green-400 text-xs shrink-0">✓</span>
             <button
               onClick={() => openEmailModal(task)}
@@ -320,24 +322,22 @@ export default function DashboardClient({ userName }: { userName: string }) {
                 )}
               </div>
             </button>
-            <div className="shrink-0 flex items-center gap-1.5">
+            <div className="shrink-0 flex items-center gap-2">
               <div className="text-right">
                 <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md block">{task.taskType}</span>
                 <span className="text-xs text-gray-400 mt-0.5 block">{shortDateTime(task.completedAt)}</span>
               </div>
-              <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex flex-col gap-1">
                 <button
                   onClick={() => { setEditNoteId(task.id); setEditNoteText(task.completionNote ?? "") }}
-                  className="text-xs text-gray-400 hover:text-indigo-500 px-1.5 py-0.5 rounded border border-transparent hover:border-indigo-200 transition-colors"
-                  title="메모 수정"
+                  className="text-xs text-gray-400 hover:text-indigo-600 px-2 py-0.5 rounded border border-gray-200 hover:border-indigo-300 transition-colors bg-white"
                 >
-                  수정
+                  메모
                 </button>
                 <button
                   onClick={() => handleReopen(task.id)}
                   disabled={reopening.has(task.id)}
-                  className="text-xs text-gray-400 hover:text-orange-500 px-1.5 py-0.5 rounded border border-transparent hover:border-orange-200 transition-colors disabled:opacity-40"
-                  title="완료 취소"
+                  className="text-xs text-gray-400 hover:text-orange-600 px-2 py-0.5 rounded border border-gray-200 hover:border-orange-300 transition-colors bg-white disabled:opacity-40"
                 >
                   {reopening.has(task.id) ? "..." : "취소"}
                 </button>
@@ -416,6 +416,17 @@ export default function DashboardClient({ userName }: { userName: string }) {
                         <div className="bg-orange-400 px-4 py-1.5 flex items-center gap-1.5">
                           <span className="text-white text-xs font-semibold">마감 {dl}일 전</span>
                           <span className="text-orange-100 text-xs">{formatDeadline(task.deadline)}</span>
+                        </div>
+                      )}
+                      {task.adminFeedback && (
+                        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-start gap-2">
+                          <span className="text-amber-500 text-sm shrink-0 mt-0.5">!</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-amber-700">
+                              {task.adminFeedbackBy ?? "관리자"} 수정 요청
+                            </p>
+                            <p className="text-xs text-amber-600 mt-0.5 leading-relaxed">{task.adminFeedback}</p>
+                          </div>
                         </div>
                       )}
                       <div className="p-4">

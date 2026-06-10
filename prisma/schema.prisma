@@ -47,7 +47,9 @@ model Task {
   status          String         @default("pending")
   completedAt     DateTime?
   completionNote  String?
-  completedByName String?        // 실제 완료한 담당자 이름
+  completedByName String?
+  adminFeedback   String?
+  adminFeedbackBy String?
   notifications   Notification[]
   createdAt      DateTime       @default(now())
 }

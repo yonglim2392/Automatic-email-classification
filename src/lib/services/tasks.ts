@@ -51,7 +51,7 @@ export async function completeTask(
 
   await prisma.task.update({
     where: { id: taskId },
-    data: { status: "done", completedAt: new Date(), completionNote, completedByName },
+    data: { status: "done", completedAt: new Date(), completionNote, completedByName, adminFeedback: null, adminFeedbackBy: null },
   })
 }
 
