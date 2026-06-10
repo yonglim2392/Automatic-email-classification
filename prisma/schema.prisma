@@ -40,21 +40,25 @@ model Task {
   title          String
   description    String
   taskType       String
-  assigneeId     String
-  assignee       User           @relation(fields: [assigneeId], references: [id])
-  deadline       DateTime?
-  status         String         @default("pending")
-  completedAt    DateTime?
-  completionNote String?
-  notifications  Notification[]
+  assigneeId      String
+  assignee        User           @relation(fields: [assigneeId], references: [id])
+  coAssigneeIds   String         @default("[]") // JSON: 추가 담당자 ID 목록
+  deadline        DateTime?
+  status          String         @default("pending")
+  completedAt     DateTime?
+  completionNote  String?
+  completedByName String?        // 실제 완료한 담당자 이름
+  notifications   Notification[]
   createdAt      DateTime       @default(now())
 }
 
 model RoutingRule {
   id                String @id @default(cuid())
   taskType          String @unique
+  description       String @default("") // LLM 분류 힌트
   defaultAssigneeId String
   defaultAssignee   User   @relation(fields: [defaultAssigneeId], references: [id])
+  coAssigneeIds     String @default("[]") // JSON: 추가 담당자 ID 목록
 }
 
 model Notification {

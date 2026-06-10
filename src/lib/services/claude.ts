@@ -7,16 +7,36 @@ export type ParsedTask = {
   deadline: string | null
 }
 
-const VALID_TASK_TYPES = ["가격", "배송", "서류", "품질", "생산", "기타"]
+export type TaskTypeDefinition = {
+  taskType: string
+  description: string
+}
+
+const FALLBACK_TASK_TYPES: TaskTypeDefinition[] = [
+  { taskType: "가격", description: "가격 협의, 견적, 할인 요청 관련" },
+  { taskType: "배송", description: "배송, 물류, 선적, 납기 관련" },
+  { taskType: "서류", description: "인보이스, 서류, 계약서 관련" },
+  { taskType: "품질", description: "품질 클레임, 검수, 불량 관련" },
+  { taskType: "생산", description: "생산 일정, 샘플, 제조 관련" },
+  { taskType: "기타", description: "위 카테고리에 해당하지 않는 기타 업무" },
+]
 
 function getModel() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
   return genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" })
 }
 
-export async function parseEmail(subject: string, body: string): Promise<ParsedTask[]> {
+export async function parseEmail(
+  subject: string,
+  body: string,
+  taskTypes: TaskTypeDefinition[] = FALLBACK_TASK_TYPES,
+): Promise<ParsedTask[]> {
   const model = getModel()
   const today = new Date().toISOString().split("T")[0]
+
+  const validTypes = taskTypes.map(t => t.taskType)
+  const typeGuide = taskTypes.map(t => `- ${t.taskType}: ${t.description}`).join("\n")
+
   const prompt = `오늘 날짜: ${today}
 다음 이메일에서 업무 목록을 추출하세요. JSON 배열만 반환하고 다른 텍스트는 포함하지 마세요.
 "내일", "명일", "다음주" 등 상대적 날짜 표현은 오늘 날짜 기준으로 계산하세요.
@@ -25,12 +45,15 @@ export async function parseEmail(subject: string, body: string): Promise<ParsedT
 본문:
 ${body}
 
+업무 유형 (taskType) 분류 기준:
+${typeGuide}
+
 각 업무마다 다음 형식으로 반환하세요:
 [
   {
     "title": "업무 제목 (한 줄 요약)",
     "description": "상세 내용",
-    "taskType": "${VALID_TASK_TYPES.join(" | ")} 중 하나",
+    "taskType": "${validTypes.join(" | ")} 중 가장 적합한 것",
     "deadline": "YYYY-MM-DDTHH:mm+09:00 형식 (한국 시간 KST 기준). 시간 언급 있으면 해당 시간, 없으면 T00:00+09:00. 마감기한 없으면 null"
   }
 ]`
@@ -42,7 +65,7 @@ ${body}
     const parsed: ParsedTask[] = JSON.parse(jsonMatch ? jsonMatch[0] : "[]")
     return parsed.map(t => ({
       ...t,
-      taskType: VALID_TASK_TYPES.includes(t.taskType) ? t.taskType : "기타",
+      taskType: validTypes.includes(t.taskType) ? t.taskType : (validTypes.includes("기타") ? "기타" : validTypes[0]),
     }))
   } catch {
     return []

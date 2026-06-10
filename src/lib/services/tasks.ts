@@ -25,6 +25,7 @@ export async function createTasksFromEmail(
         description: t.description,
         taskType: t.taskType,
         assigneeId: t.assigneeId,
+        coAssigneeIds: JSON.stringify(t.coAssigneeIds ?? []),
         deadline: t.deadline ? new Date(t.deadline) : null,
         status: "pending",
       },
@@ -38,15 +39,19 @@ export async function completeTask(
   taskId: string,
   userId: string,
   completionNote: string | null,
+  completedByName: string,
   isAdmin = false,
 ): Promise<void> {
   const task = await prisma.task.findUnique({ where: { id: taskId } })
   if (!task) throw new Error("권한 없음")
-  if (!isAdmin && task.assigneeId !== userId) throw new Error("권한 없음")
+
+  const coIds: string[] = JSON.parse(task.coAssigneeIds ?? "[]")
+  const isAssignee = task.assigneeId === userId || coIds.includes(userId)
+  if (!isAdmin && !isAssignee) throw new Error("권한 없음")
 
   await prisma.task.update({
     where: { id: taskId },
-    data: { status: "done", completedAt: new Date(), completionNote },
+    data: { status: "done", completedAt: new Date(), completionNote, completedByName },
   })
 }
 

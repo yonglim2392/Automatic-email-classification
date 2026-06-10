@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { listNewEmails, markAsRead } from "@/lib/services/gmail"
 import { parseEmail } from "@/lib/services/claude"
-import { assignTasks } from "@/lib/services/routing"
+import { assignTasks, getTaskTypeDefinitions } from "@/lib/services/routing"
 import { createTasksFromEmail } from "@/lib/services/tasks"
 import { sendAssignmentNotification } from "@/lib/services/notify"
 
@@ -16,10 +16,11 @@ export async function GET(request: Request) {
   const processedIds = processedEmails.map(e => e.gmailId)
 
   const newEmails = await listNewEmails(processedIds)
+  const taskTypes = await getTaskTypeDefinitions()
   let processed = 0
 
   for (const raw of newEmails) {
-    const parsedTasks = await parseEmail(raw.subject, raw.body)
+    const parsedTasks = await parseEmail(raw.subject, raw.body, taskTypes.length > 0 ? taskTypes : undefined)
 
     if (parsedTasks.length === 0) {
       await prisma.email.create({

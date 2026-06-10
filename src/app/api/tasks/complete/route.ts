@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const { taskId, completionNote } = await request.json()
 
   try {
-    await completeTask(taskId, session.user.id, completionNote ?? null, session.user.role === "admin")
+    await completeTask(taskId, session.user.id, completionNote ?? null, session.user.name ?? "", session.user.role === "admin")
   } catch {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 })
   }

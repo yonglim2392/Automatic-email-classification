@@ -26,7 +26,7 @@ describe("completeTask", () => {
     })
     ;(mockPrisma.task.update as jest.Mock).mockResolvedValue({})
 
-    await completeTask("task-1", "user-1", "완료했습니다")
+    await completeTask("task-1", "user-1", "완료했습니다", "테스트유저")
 
     expect(mockPrisma.task.update).toHaveBeenCalledWith({
       where: { id: "task-1" },
@@ -40,7 +40,7 @@ describe("completeTask", () => {
       assigneeId: "user-2",
     })
 
-    await expect(completeTask("task-1", "user-1", null)).rejects.toThrow("권한 없음")
+    await expect(completeTask("task-1", "user-1", null, "테스트유저")).rejects.toThrow("권한 없음")
   })
 })
 
