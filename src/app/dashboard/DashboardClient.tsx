@@ -339,8 +339,21 @@ export default function DashboardClient({ userName }: { userName: string }) {
                               <span className="text-xs text-gray-400">D-{dl}</span>
                             )}
                           </div>
-                          <p className="font-semibold text-gray-900 leading-snug">{task.title}</p>
-                          <p className="text-sm text-gray-500 mt-0.5 truncate">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-semibold text-gray-900 leading-snug">{task.title}</p>
+                            <button
+                              onClick={() => openEmailModal(task)}
+                              className="shrink-0 text-xs text-gray-400 hover:text-indigo-500 border border-gray-200 hover:border-indigo-300 px-2 py-0.5 rounded-md transition-colors mt-0.5"
+                            >
+                              원문
+                            </button>
+                          </div>
+                          {task.description && (
+                            <p className="text-sm text-gray-600 mt-1.5 leading-relaxed bg-gray-50 rounded-lg px-3 py-2">
+                              {task.description}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-1.5">
                             {extractSenderName(task.email.from)} · {task.email.subject}
                           </p>
                           {task.deadline && !isUrgent && !isWarning && (
