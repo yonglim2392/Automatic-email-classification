@@ -51,3 +51,10 @@ next-env.d.ts
 send_test_email.py
 email_config.py
 scripts/clear-data.mjs
+
+# Python
+__pycache__/
+*.pyc
+
+# Uploads (runtime directory)
+/uploads/
