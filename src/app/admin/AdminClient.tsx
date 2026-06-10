@@ -109,6 +109,12 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   const [adminCompleteNote, setAdminCompleteNote] = useState<Record<string, string>>({})
   const [adminCompleting, setAdminCompleting] = useState<Set<string>>(new Set())
 
+  // 태스크 인라인 편집
+  type EditingTask = { title: string; description: string; taskType: string }
+  const [editingTask, setEditingTask] = useState<string | null>(null)
+  const [editTaskState, setEditTaskState] = useState<EditingTask>({ title: "", description: "", taskType: "" })
+  const [savingTask, setSavingTask] = useState(false)
+
   function loadTasks() {
     fetch("/api/tasks")
       .then(r => r.json())
@@ -159,6 +165,24 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
       setAdminCompleting(prev => { const s = new Set(prev); s.delete(taskId); return s })
       setAdminCompleteMode(prev => { const s = new Set(prev); s.delete(taskId); return s })
       setAdminCompleteNote(prev => { const n = { ...prev }; delete n[taskId]; return n })
+    }
+  }
+
+  async function handleSaveTask(taskId: string) {
+    setSavingTask(true)
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editTaskState),
+      })
+      setGroups(prev => prev.map(g => ({
+        ...g,
+        tasks: g.tasks.map(t => t.id === taskId ? { ...t, ...editTaskState } : t),
+      })))
+      setEditingTask(null)
+    } finally {
+      setSavingTask(false)
     }
   }
 
@@ -400,36 +424,85 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
         {isOpen && (
           <div className="divide-y divide-gray-50 border-t border-gray-100">
             {group.tasks.map(task => (
-              <div key={task.id} className="px-4 py-3 flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${task.status === "done" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                      {task.status === "done" ? "완료" : "대기"}
-                    </span>
-                    <span className="text-xs text-gray-400">{task.taskType}</span>
-                    {task.deadline && task.status !== "done" && (
-                      <span className="text-xs text-orange-500">마감 {formatDeadline(task.deadline)}</span>
-                    )}
-                  </div>
-                  <p className={`text-sm font-medium ${task.status === "done" ? "text-gray-400 line-through" : "text-gray-800"}`}>
-                    {task.title}
-                  </p>
-                  {task.completionNote && (
-                    <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
-                      <p className="text-xs text-gray-500">{task.completionNote}</p>
+              <div key={task.id} className="px-4 py-3">
+                {editingTask === task.id ? (
+                  <div className="space-y-2">
+                    <input
+                      className="w-full text-sm border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      value={editTaskState.title}
+                      onChange={e => setEditTaskState(s => ({ ...s, title: e.target.value }))}
+                      placeholder="업무 제목"
+                    />
+                    <input
+                      className="w-full text-sm border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      value={editTaskState.description}
+                      onChange={e => setEditTaskState(s => ({ ...s, description: e.target.value }))}
+                      placeholder="상세 내용"
+                    />
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="text-sm border border-indigo-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        value={editTaskState.taskType}
+                        onChange={e => setEditTaskState(s => ({ ...s, taskType: e.target.value }))}
+                      >
+                        {Array.from(new Set(groups.flatMap(g => g.tasks.map(t => t.taskType)))).map(tt => (
+                          <option key={tt} value={tt}>{tt}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleSaveTask(task.id)}
+                        disabled={savingTask}
+                        className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+                      >
+                        {savingTask ? "저장 중..." : "저장"}
+                      </button>
+                      <button
+                        onClick={() => setEditingTask(null)}
+                        className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+                      >
+                        취소
+                      </button>
                     </div>
-                  )}
-                  {task.completedAt && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      완료 {formatDateTime(task.completedAt)}
-                      {task.completedByName && ` · ${task.completedByName}`}
-                    </p>
-                  )}
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-sm font-medium text-gray-700">{task.assignee.name}</p>
-                  {renderTaskControls(task)}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${task.status === "done" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                          {task.status === "done" ? "완료" : "대기"}
+                        </span>
+                        <span className="text-xs text-gray-400">{task.taskType}</span>
+                        {task.deadline && task.status !== "done" && (
+                          <span className="text-xs text-orange-500">마감 {formatDeadline(task.deadline)}</span>
+                        )}
+                        <button
+                          onClick={() => { setEditingTask(task.id); setEditTaskState({ title: task.title, description: "", taskType: task.taskType }) }}
+                          className="text-xs text-gray-300 hover:text-indigo-400 transition-colors ml-1"
+                        >
+                          수정
+                        </button>
+                      </div>
+                      <p className={`text-sm font-medium ${task.status === "done" ? "text-gray-400 line-through" : "text-gray-800"}`}>
+                        {task.title}
+                      </p>
+                      {task.completionNote && (
+                        <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
+                          <p className="text-xs text-gray-500">{task.completionNote}</p>
+                        </div>
+                      )}
+                      {task.completedAt && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          완료 {formatDateTime(task.completedAt)}
+                          {task.completedByName && ` · ${task.completedByName}`}
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-medium text-gray-700">{task.assignee.name}</p>
+                      {renderTaskControls(task)}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
