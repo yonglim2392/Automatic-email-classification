@@ -304,28 +304,38 @@ export default function DashboardClient({ userName }: { userName: string }) {
                 {pending.map(task => {
                   const dl = daysLeft(task.deadline)
                   const isUrgent = dl !== null && dl <= 3
+                  const isWarning = dl !== null && dl > 3 && dl <= 7
                   const isCompleting = completing.has(task.id)
                   return (
                     <div
                       key={task.id}
-                      className={`rounded-xl border bg-white shadow-sm overflow-hidden ${isUrgent ? "border-red-300" : "border-gray-200"}`}
+                      className={`rounded-xl border bg-white shadow-sm overflow-hidden ${isUrgent ? "border-red-300" : isWarning ? "border-orange-200" : "border-gray-200"}`}
                     >
                       {isUrgent && (
                         <div className="bg-red-500 px-4 py-1.5 flex items-center gap-1.5">
                           <span className="text-white text-xs font-semibold">⚠ 마감 임박</span>
-                          <span className="text-red-200 text-xs">{formatDeadline(task.deadline)} (D-{dl})</span>
+                          <span className="text-red-200 text-xs">{formatDeadline(task.deadline)} · D-{dl}</span>
+                        </div>
+                      )}
+                      {isWarning && (
+                        <div className="bg-orange-400 px-4 py-1.5 flex items-center gap-1.5">
+                          <span className="text-white text-xs font-semibold">마감 {dl}일 전</span>
+                          <span className="text-orange-100 text-xs">{formatDeadline(task.deadline)}</span>
                         </div>
                       )}
                       <div className="p-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">{task.taskType}</span>
+                            {dl !== null && !isUrgent && !isWarning && (
+                              <span className="text-xs text-gray-400">D-{dl}</span>
+                            )}
                           </div>
                           <p className="font-semibold text-gray-900 leading-snug">{task.title}</p>
                           <p className="text-sm text-gray-500 mt-0.5 truncate">
                             {extractSenderName(task.email.from)} · {task.email.subject}
                           </p>
-                          {task.deadline && !isUrgent && (
+                          {task.deadline && !isUrgent && !isWarning && (
                             <p className="text-sm text-gray-400 mt-1">마감 {formatDeadline(task.deadline)}</p>
                           )}
                         </div>
