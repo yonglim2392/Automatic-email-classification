@@ -56,9 +56,18 @@ export async function completeTask(
 }
 
 export async function reassignTask(taskId: string, newAssigneeId: string): Promise<void> {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { emailId: true } })
+  if (!task) return
+
   await prisma.task.update({
     where: { id: taskId },
-    data: { assigneeId: newAssigneeId, status: "pending" },
+    data: { assigneeId: newAssigneeId, status: "pending", completedAt: null, completionNote: null, completedByName: null },
+  })
+
+  // 이메일이 ready 상태면 미완료 태스크가 생겼으므로 processed로 롤백
+  await prisma.email.updateMany({
+    where: { id: task.emailId, status: "ready" },
+    data: { status: "processed" },
   })
 }
 
