@@ -483,12 +483,14 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                         {task.deadline && task.status !== "done" && (
                           <span className="text-xs text-orange-500">마감 {formatDeadline(task.deadline)}</span>
                         )}
-                        <button
-                          onClick={() => { setEditingTask(task.id); setEditTaskState({ title: task.title, description: "", taskType: task.taskType }) }}
-                          className="text-xs text-gray-300 hover:text-indigo-400 transition-colors ml-1"
-                        >
-                          수정
-                        </button>
+                        {task.status !== "done" && (
+                          <button
+                            onClick={() => { setEditingTask(task.id); setEditTaskState({ title: task.title, description: "", taskType: task.taskType }) }}
+                            className="text-xs text-gray-300 hover:text-indigo-400 transition-colors ml-1"
+                          >
+                            수정
+                          </button>
+                        )}
                       </div>
                       <p className={`text-sm font-medium ${task.status === "done" ? "text-gray-400 line-through" : "text-gray-800"}`}>
                         {task.title}
