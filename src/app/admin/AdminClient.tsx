@@ -169,11 +169,16 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     if (adminCompleting.has(taskId)) return
     setAdminCompleting(prev => new Set([...prev, taskId]))
     try {
-      await fetch("/api/tasks/complete", {
+      const res = await fetch("/api/tasks/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskId, completionNote: adminCompleteNote[taskId] ?? "" }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error ?? "완료 처리에 실패했습니다.")
+        return
+      }
       loadTasks()
     } finally {
       setAdminCompleting(prev => { const s = new Set(prev); s.delete(taskId); return s })

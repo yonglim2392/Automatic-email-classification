@@ -183,18 +183,18 @@ export default function DashboardClient({ userName }: { userName: string }) {
     if (completing.has(taskId)) return
     setCompleting(prev => new Set([...prev, taskId]))
     try {
-      await fetch("/api/tasks/complete", {
+      const res = await fetch("/api/tasks/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskId, completionNote: completionNote[taskId] ?? "" }),
       })
-      setTasks(prev =>
-        prev.map(t =>
-          t.id === taskId
-            ? { ...t, status: "done", completedAt: new Date().toISOString(), completionNote: completionNote[taskId] ?? "" }
-            : t
-        )
-      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error ?? "완료 처리에 실패했습니다.")
+        return
+      }
+      setCompletionNote(prev => { const n = { ...prev }; delete n[taskId]; return n })
+      loadTasks()
     } finally {
       setCompleting(prev => { const s = new Set(prev); s.delete(taskId); return s })
     }
