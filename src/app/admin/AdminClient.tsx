@@ -20,7 +20,10 @@ type Task = {
   completedByName: string | null
   adminFeedback: string | null
   adminFeedbackBy: string | null
-  email: { id: string; from: string; subject: string; receivedAt: string; status: string }
+  email: {
+    id: string; from: string; subject: string; receivedAt: string; status: string
+    summarySubject: string | null; summaryBody: string | null
+  }
   assignee: { name: string }
   attachments: Attachment[]
 }
@@ -31,6 +34,8 @@ type EmailGroup = {
   from: string
   subject: string
   receivedAt: string
+  summarySubject: string | null
+  summaryBody: string | null
   tasks: Task[]
 }
 
@@ -106,18 +111,28 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   const [view, setView] = useState<"buyer" | "date">("buyer")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
-  // 이메일 원문 모달
-  type EmailModalData = { emailId: string; from: string; subject: string; receivedAt: string; body: string | null }
+  // 이메일 모달 (원문 + 발송 내용 탭)
+  type EmailModalData = {
+    emailId: string; from: string; subject: string; receivedAt: string
+    originalBody: string | null
+    summarySubject: string | null; summaryBody: string | null
+  }
   const [emailModal, setEmailModal] = useState<EmailModalData | null>(null)
+  const [emailModalTab, setEmailModalTab] = useState<"original" | "sent">("original")
   const [loadingEmailBody, setLoadingEmailBody] = useState(false)
 
-  async function openEmailModal(emailId: string, from: string, subject: string, receivedAt: string) {
-    setEmailModal({ emailId, from, subject, receivedAt, body: null })
+  async function openEmailModal(
+    emailId: string, from: string, subject: string, receivedAt: string,
+    summarySubject: string | null, summaryBody: string | null,
+    defaultTab: "original" | "sent" = "original",
+  ) {
+    setEmailModal({ emailId, from, subject, receivedAt, originalBody: null, summarySubject, summaryBody })
+    setEmailModalTab(defaultTab)
     setLoadingEmailBody(true)
     try {
       const res = await fetch(`/api/tasks/email-body?emailId=${emailId}`)
       const data = await res.json()
-      setEmailModal({ emailId, from, subject, receivedAt, body: data.body ?? null })
+      setEmailModal(prev => prev ? { ...prev, originalBody: data.body ?? null } : prev)
     } finally {
       setLoadingEmailBody(false)
     }
@@ -153,6 +168,8 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
               from: task.email.from,
               subject: task.email.subject,
               receivedAt: task.email.receivedAt,
+              summarySubject: task.email.summarySubject,
+              summaryBody: task.email.summaryBody,
               tasks: [],
             })
           }
@@ -478,8 +495,16 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                   {previewing.has(group.emailId) ? "불러오는 중..." : "📤 메일 발송"}
                 </button>
               )}
+              {group.emailStatus === "completed" && group.summaryBody && (
+                <button
+                  onClick={e => { e.stopPropagation(); openEmailModal(group.emailId, group.from, group.subject, group.receivedAt, group.summarySubject, group.summaryBody, "sent") }}
+                  className="text-xs text-green-600 hover:text-green-800 border border-green-200 hover:border-green-400 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-md transition-colors"
+                >
+                  발송 내용
+                </button>
+              )}
               <button
-                onClick={e => { e.stopPropagation(); openEmailModal(group.emailId, group.from, group.subject, group.receivedAt) }}
+                onClick={e => { e.stopPropagation(); openEmailModal(group.emailId, group.from, group.subject, group.receivedAt, group.summarySubject, group.summaryBody) }}
                 className="text-xs text-gray-400 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 px-2 py-0.5 rounded-md transition-colors"
               >
                 원문
@@ -808,7 +833,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
           </div>
         )}
 
-        {/* 이메일 원문 모달 */}
+        {/* 이메일 모달 (원문 / 발송 내용 탭) */}
         {emailModal && (
           <div
             className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -818,11 +843,16 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
               className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[80vh] flex flex-col shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              <div className="px-5 pt-5 pb-4 border-b border-gray-100 shrink-0">
-                <div className="flex items-start justify-between gap-3">
+              {/* 헤더 */}
+              <div className="px-5 pt-5 pb-0 border-b border-gray-100 shrink-0">
+                <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-400 mb-0.5">{extractSenderName(emailModal.from)}</p>
-                    <p className="font-semibold text-gray-800 leading-snug">{emailModal.subject}</p>
+                    <p className="font-semibold text-gray-800 leading-snug">
+                      {emailModalTab === "sent" && emailModal.summarySubject
+                        ? emailModal.summarySubject
+                        : emailModal.subject}
+                    </p>
                     <p className="text-xs text-gray-400 mt-1">
                       수신 {new Date(emailModal.receivedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </p>
@@ -833,16 +863,46 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                     </svg>
                   </button>
                 </div>
-              </div>
-              <div className="overflow-y-auto flex-1 px-5 py-4">
-                {loadingEmailBody ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                {/* 탭 - 발송 내용이 있을 때만 표시 */}
+                {emailModal.summaryBody && (
+                  <div className="flex gap-0 -mb-px">
+                    <button
+                      onClick={() => setEmailModalTab("original")}
+                      className={`text-xs px-4 py-2 border-b-2 font-medium transition-colors ${
+                        emailModalTab === "original"
+                          ? "border-indigo-500 text-indigo-600"
+                          : "border-transparent text-gray-400 hover:text-gray-600"
+                      }`}
+                    >
+                      원문
+                    </button>
+                    <button
+                      onClick={() => setEmailModalTab("sent")}
+                      className={`text-xs px-4 py-2 border-b-2 font-medium transition-colors ${
+                        emailModalTab === "sent"
+                          ? "border-green-500 text-green-600"
+                          : "border-transparent text-gray-400 hover:text-gray-600"
+                      }`}
+                    >
+                      발송 내용
+                    </button>
                   </div>
-                ) : emailModal.body ? (
-                  <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{emailModal.body}</p>
+                )}
+              </div>
+              {/* 본문 */}
+              <div className="overflow-y-auto flex-1 px-5 py-4">
+                {emailModalTab === "original" ? (
+                  loadingEmailBody ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                    </div>
+                  ) : emailModal.originalBody ? (
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{emailModal.originalBody}</p>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center py-12">이메일을 불러올 수 없습니다.</p>
+                  )
                 ) : (
-                  <p className="text-sm text-gray-400 text-center py-12">이메일을 불러올 수 없습니다.</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{emailModal.summaryBody}</p>
                 )}
               </div>
             </div>
