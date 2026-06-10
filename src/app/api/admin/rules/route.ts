@@ -18,11 +18,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const { taskType, defaultAssigneeId } = await request.json()
+  const { taskType, defaultAssigneeId, description = "", coAssigneeIds = [] } = await request.json()
   const rule = await prisma.routingRule.upsert({
     where: { taskType },
-    update: { defaultAssigneeId },
-    create: { taskType, defaultAssigneeId },
+    update: { defaultAssigneeId, description, coAssigneeIds: JSON.stringify(coAssigneeIds) },
+    create: { taskType, defaultAssigneeId, description, coAssigneeIds: JSON.stringify(coAssigneeIds) },
   })
   return NextResponse.json(rule)
 }

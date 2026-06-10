@@ -11,6 +11,7 @@ type Task = {
   status: string
   completedAt: string | null
   completionNote: string | null
+  completedByName: string | null
   email: { id: string; from: string; subject: string; receivedAt: string }
   assignee: { name: string }
 }
@@ -203,7 +204,12 @@ export default function DashboardClient({ userName }: { userName: string }) {
             {showBuyer && (
               <span className="text-xs text-gray-400">{extractSenderName(task.email.from)}</span>
             )}
-            {showBuyer && task.completionNote && <span className="text-gray-200 text-xs">·</span>}
+            {task.completedByName && task.completedByName !== userName && (
+              <span className="text-xs text-indigo-400">처리: {task.completedByName}</span>
+            )}
+            {(showBuyer || (task.completedByName && task.completedByName !== userName)) && task.completionNote && (
+              <span className="text-gray-200 text-xs">·</span>
+            )}
             {task.completionNote && (
               <span className="text-xs text-gray-400 italic">{task.completionNote}</span>
             )}

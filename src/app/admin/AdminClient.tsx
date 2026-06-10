@@ -9,6 +9,7 @@ type Task = {
   deadline: string | null
   completedAt: string | null
   completionNote: string | null
+  completedByName: string | null
   email: { id: string; from: string; subject: string; receivedAt: string; status: string }
   assignee: { name: string }
 }
@@ -386,9 +387,6 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                   {previewing.has(group.emailId) ? "불러오는 중..." : "📤 메일 발송"}
                 </button>
               )}
-              {group.emailStatus === "completed" && (
-                <span className="text-xs text-green-600 font-medium">✅ 완료</span>
-              )}
               <button
                 onClick={e => { e.stopPropagation(); openEmailModal(group.emailId, group.from, group.subject, group.receivedAt) }}
                 className="text-xs text-gray-400 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 px-2 py-0.5 rounded-md transition-colors"
@@ -422,7 +420,10 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                     </div>
                   )}
                   {task.completedAt && (
-                    <p className="text-xs text-gray-400 mt-1">완료 {formatDateTime(task.completedAt)}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      완료 {formatDateTime(task.completedAt)}
+                      {task.completedByName && ` · ${task.completedByName}`}
+                    </p>
                   )}
                 </div>
                 <div className="shrink-0 text-right">
