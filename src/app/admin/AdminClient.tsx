@@ -86,6 +86,23 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   const [view, setView] = useState<"buyer" | "date">("buyer")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
+  // 이메일 원문 모달
+  type EmailModalData = { emailId: string; from: string; subject: string; receivedAt: string; body: string | null }
+  const [emailModal, setEmailModal] = useState<EmailModalData | null>(null)
+  const [loadingEmailBody, setLoadingEmailBody] = useState(false)
+
+  async function openEmailModal(emailId: string, from: string, subject: string, receivedAt: string) {
+    setEmailModal({ emailId, from, subject, receivedAt, body: null })
+    setLoadingEmailBody(true)
+    try {
+      const res = await fetch(`/api/tasks/email-body?emailId=${emailId}`)
+      const data = await res.json()
+      setEmailModal({ emailId, from, subject, receivedAt, body: data.body ?? null })
+    } finally {
+      setLoadingEmailBody(false)
+    }
+  }
+
   // 관리자 강제 완료
   const [adminCompleteMode, setAdminCompleteMode] = useState<Set<string>>(new Set())
   const [adminCompleteNote, setAdminCompleteNote] = useState<Record<string, string>>({})
@@ -372,6 +389,12 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
               {group.emailStatus === "completed" && (
                 <span className="text-xs text-green-600 font-medium">✅ 완료</span>
               )}
+              <button
+                onClick={e => { e.stopPropagation(); openEmailModal(group.emailId, group.from, group.subject, group.receivedAt) }}
+                className="text-xs text-gray-400 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 px-2 py-0.5 rounded-md transition-colors"
+              >
+                원문
+              </button>
               <span className="text-gray-300 text-xs">{isOpen ? "▲" : "▼"}</span>
             </div>
           </div>
@@ -590,27 +613,27 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                   : "해당 상태의 이메일이 없습니다."}
               </div>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-3">
                 {dateEntries.map(({ date, emails }) => {
                   const isCollapsed = collapsedDates.has(date)
                   const allDateTasks = emails.flatMap(e => e.tasks)
                   const doneCnt = allDateTasks.filter(t => t.status === "done").length
                   const hasReady = emails.some(e => e.emailStatus === "ready")
                   return (
-                    <div key={date}>
-                      <div
-                        className="flex items-center gap-2 mb-2 cursor-pointer select-none group"
+                    <div key={date} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      <button
                         onClick={() => toggleDate(date)}
+                        className="w-full px-4 py-3.5 flex items-center gap-2 hover:bg-gray-50 transition-colors select-none text-left"
                       >
-                        <p className="text-sm font-semibold text-gray-600">{date}</p>
+                        <p className="text-sm font-semibold text-gray-700">{date}</p>
                         <span className="text-xs text-gray-400">이메일 {emails.length}개</span>
                         <span className="text-gray-300 mx-1 text-xs">·</span>
                         <span className="text-xs text-gray-400">태스크 {doneCnt}/{allDateTasks.length} 완료</span>
-                        {hasReady && <span className="text-xs bg-orange-100 text-orange-600 font-medium px-2 py-0.5 rounded-full">발송 대기</span>}
-                        <span className="ml-auto text-gray-300 text-xs group-hover:text-gray-400">{isCollapsed ? "▼" : "▲"}</span>
-                      </div>
+                        {hasReady && <span className="text-xs bg-orange-100 text-orange-600 font-medium px-2 py-0.5 rounded-full ml-1">발송 대기</span>}
+                        <span className="ml-auto text-gray-300 text-xs">{isCollapsed ? "▼" : "▲"}</span>
+                      </button>
                       {!isCollapsed && (
-                        <div className="space-y-2">
+                        <div className="border-t border-gray-100 px-4 py-3 space-y-2 bg-gray-50/30">
                           {emails.map(group => renderEmailAccordion(group))}
                         </div>
                       )}
@@ -619,6 +642,47 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* 이메일 원문 모달 */}
+        {emailModal && (
+          <div
+            className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            onClick={() => setEmailModal(null)}
+          >
+            <div
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[80vh] flex flex-col shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-5 pt-5 pb-4 border-b border-gray-100 shrink-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-400 mb-0.5">{extractSenderName(emailModal.from)}</p>
+                    <p className="font-semibold text-gray-800 leading-snug">{emailModal.subject}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      수신 {new Date(emailModal.receivedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                  <button onClick={() => setEmailModal(null)} className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 mt-0.5">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-y-auto flex-1 px-5 py-4">
+                {loadingEmailBody ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                  </div>
+                ) : emailModal.body ? (
+                  <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{emailModal.body}</p>
+                ) : (
+                  <p className="text-sm text-gray-400 text-center py-12">이메일을 불러올 수 없습니다.</p>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

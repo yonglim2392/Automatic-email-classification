@@ -43,10 +43,9 @@ function extractEmail(from: string) {
   return match ? match[1] : from
 }
 
-function shortDate(iso: string | null) {
+function shortDateTime(iso: string | null) {
   if (!iso) return ""
-  const d = new Date(iso)
-  return d.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })
+  return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
 }
 
 export default function DashboardClient({ userName }: { userName: string }) {
@@ -56,7 +55,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
   const [completing, setCompleting] = useState<Set<string>>(new Set())
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
   const [expandedBuyers, setExpandedBuyers] = useState<Set<string>>(new Set())
-  const [doneView, setDoneView] = useState<"date" | "buyer">("date")
+  const [doneView, setDoneView] = useState<"date" | "buyer">("buyer")
 
   // 이메일 원문 모달
   const [emailModal, setEmailModal] = useState<{ task: Task; detail: EmailDetail | null } | null>(null)
@@ -213,7 +212,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
         <div className="shrink-0 flex items-center gap-2">
           <div className="text-right">
             <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md block">{task.taskType}</span>
-            <span className="text-xs text-gray-400 mt-0.5 block">{shortDate(task.completedAt)}</span>
+            <span className="text-xs text-gray-400 mt-0.5 block">{shortDateTime(task.completedAt)}</span>
           </div>
           <svg className="w-3.5 h-3.5 text-gray-200 group-hover:text-gray-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -321,16 +320,16 @@ export default function DashboardClient({ userName }: { userName: string }) {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">완료된 업무</p>
                   <div className="flex bg-gray-100 rounded-lg p-0.5 text-xs">
                     <button
-                      onClick={() => setDoneView("date")}
-                      className={`px-3 py-1.5 rounded-md font-medium transition-colors ${doneView === "date" ? "bg-white shadow text-gray-800" : "text-gray-500 hover:text-gray-700"}`}
-                    >
-                      날짜별
-                    </button>
-                    <button
                       onClick={() => setDoneView("buyer")}
                       className={`px-3 py-1.5 rounded-md font-medium transition-colors ${doneView === "buyer" ? "bg-white shadow text-gray-800" : "text-gray-500 hover:text-gray-700"}`}
                     >
                       바이어별
+                    </button>
+                    <button
+                      onClick={() => setDoneView("date")}
+                      className={`px-3 py-1.5 rounded-md font-medium transition-colors ${doneView === "date" ? "bg-white shadow text-gray-800" : "text-gray-500 hover:text-gray-700"}`}
+                    >
+                      날짜별
                     </button>
                   </div>
                 </div>
