@@ -9,10 +9,14 @@ export async function POST(request: Request) {
 
   const { taskId, completionNote } = await request.json()
 
+  console.log("[complete] taskId=%s userId=%s role=%s", taskId, session.user.id, session.user.role)
+
   try {
     await completeTask(taskId, session.user.id, completionNote ?? null, session.user.name ?? "", session.user.role === "admin")
-  } catch {
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error("[complete] FAIL taskId=%s userId=%s error=%s", taskId, session.user.id, msg)
+    return NextResponse.json({ error: msg }, { status: 403 })
   }
 
   const task = await prisma.task.findUnique({

@@ -27,14 +27,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        token.id = user.id as string
+        // NextAuth v5에서 user.id가 undefined일 수 있으므로 token.sub(자동 설정)를 fallback으로 사용
+        token.id = (user.id ?? token.sub) as string
         token.role = (user as { role: string }).role
       }
       return token
     },
     session({ session, token }) {
       if (session.user) {
-        session.user.id = (token.id as string | undefined) ?? ""
+        session.user.id = (token.id ?? token.sub ?? "") as string
         session.user.role = (token.role as string | undefined) ?? "assignee"
       }
       return session
