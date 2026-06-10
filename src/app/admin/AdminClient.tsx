@@ -368,6 +368,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
 
   function renderTaskControls(task: Task) {
     if (task.status === "done") {
+      if (task.email.status === "completed") return null
       return (
         <button
           onClick={() => { setRevisionModal({ taskId: task.id, taskTitle: task.title }); setRevisionNote("") }}
