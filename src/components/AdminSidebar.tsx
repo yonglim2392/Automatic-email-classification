@@ -38,7 +38,7 @@ export default function AdminSidebar({ userName }: { userName: string }) {
   const initial = userName.slice(0, 1)
 
   return (
-    <aside className="w-56 shrink-0 min-h-screen bg-slate-900 flex flex-col">
+    <aside className="w-56 shrink-0 h-full bg-slate-900 flex flex-col">
       {/* 로고 */}
       <div className="px-5 h-14 flex items-center gap-3 border-b border-slate-800">
         <div className="w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">

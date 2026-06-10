@@ -56,7 +56,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
           if (!dateMap.has(key) || dateMap.get(key)! < ts) dateMap.set(key, ts)
         }
         const sorted = [...dateMap.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])
-        if (sorted.length > 2) setCollapsedDates(new Set(sorted.slice(2)))
+        setCollapsedDates(new Set(sorted))
       })
   }, [])
 
@@ -100,19 +100,21 @@ export default function DashboardClient({ userName }: { userName: string }) {
     })
   const done = tasks.filter(t => t.status === "done")
 
-  const doneByDate: Record<string, Task[]> = {}
+  // 완료 업무: 날짜 → 이메일 → 태스크
+  type EmailGroup = { from: string; subject: string; tasks: Task[] }
+  const doneByDate: Record<string, { ts: number; emails: Record<string, EmailGroup> }> = {}
   for (const t of done) {
-    const dateKey = t.completedAt
-      ? new Date(t.completedAt).toLocaleDateString("ko-KR")
-      : "날짜 미상"
-    if (!doneByDate[dateKey]) doneByDate[dateKey] = []
-    doneByDate[dateKey].push(t)
+    const ts = new Date(t.completedAt!).getTime()
+    const dateKey = new Date(t.completedAt!).toLocaleDateString("ko-KR")
+    const emailId = t.email.id
+    if (!doneByDate[dateKey]) doneByDate[dateKey] = { ts, emails: {} }
+    if (doneByDate[dateKey].ts < ts) doneByDate[dateKey].ts = ts
+    if (!doneByDate[dateKey].emails[emailId]) {
+      doneByDate[dateKey].emails[emailId] = { from: t.email.from, subject: t.email.subject, tasks: [] }
+    }
+    doneByDate[dateKey].emails[emailId].tasks.push(t)
   }
-  const sortedDates = Object.keys(doneByDate).sort((a, b) => {
-    if (a === "날짜 미상") return 1
-    if (b === "날짜 미상") return -1
-    return new Date(b).getTime() - new Date(a).getTime()
-  })
+  const sortedDates = Object.keys(doneByDate).sort((a, b) => doneByDate[b].ts - doneByDate[a].ts)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -216,40 +218,53 @@ export default function DashboardClient({ userName }: { userName: string }) {
                 <div className="space-y-5">
                   {sortedDates.map(date => {
                     const isCollapsed = collapsedDates.has(date)
+                    const emailGroups = Object.values(doneByDate[date].emails)
+                    const totalTasks = emailGroups.reduce((s, g) => s + g.tasks.length, 0)
                     return (
-                    <div key={date}>
-                      <div
-                        className="flex items-center gap-2 mb-2 cursor-pointer select-none group"
-                        onClick={() => toggleDate(date)}
-                      >
-                        <p className="text-xs font-semibold text-gray-500">{date}</p>
-                        <span className="text-xs text-gray-300">{doneByDate[date].length}건</span>
-                        <span className="ml-auto text-gray-300 text-xs group-hover:text-gray-400">
-                          {isCollapsed ? "▼" : "▲"}
-                        </span>
-                      </div>
-                      {!isCollapsed && <div className="space-y-1.5">
-                        {doneByDate[date].map(task => (
-                          <div key={task.id} className="bg-white border border-gray-100 rounded-lg px-4 py-3">
-                            <div className="flex items-start gap-3">
-                              <span className="text-green-400 shrink-0 mt-0.5 text-sm">✓</span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm text-gray-400 line-through leading-snug">{task.title}</p>
-                                <p className="text-xs text-gray-400 mt-0.5 truncate">
-                                  {extractSenderName(task.email.from)} · {task.email.subject}
-                                </p>
-                                {task.completionNote && (
-                                  <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
-                                    <p className="text-xs text-gray-500">{task.completionNote}</p>
+                      <div key={date}>
+                        <div
+                          className="flex items-center gap-2 mb-2 cursor-pointer select-none group"
+                          onClick={() => toggleDate(date)}
+                        >
+                          <p className="text-xs font-semibold text-gray-500">{date}</p>
+                          <span className="text-xs text-gray-300">{totalTasks}건</span>
+                          <span className="ml-auto text-gray-300 text-xs group-hover:text-gray-400">
+                            {isCollapsed ? "▼" : "▲"}
+                          </span>
+                        </div>
+                        {!isCollapsed && (
+                          <div className="space-y-2">
+                            {emailGroups.map((eg, i) => (
+                              <div key={i} className="bg-white border border-gray-100 rounded-lg overflow-hidden">
+                                <div className="px-4 py-2.5 bg-gray-50 flex items-center gap-2 border-b border-gray-100">
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-xs font-medium text-gray-600">{extractSenderName(eg.from)}</span>
+                                    <span className="text-gray-300 mx-1.5 text-xs">·</span>
+                                    <span className="text-xs text-gray-400 truncate">{eg.subject}</span>
                                   </div>
-                                )}
+                                  <span className="text-xs text-gray-300 shrink-0">{eg.tasks.length}건</span>
+                                </div>
+                                <div className="divide-y divide-gray-50">
+                                  {eg.tasks.map(task => (
+                                    <div key={task.id} className="px-4 py-2.5 flex items-start gap-2">
+                                      <span className="text-green-400 text-xs shrink-0 mt-0.5">✓</span>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm text-gray-400 line-through leading-snug">{task.title}</p>
+                                        {task.completionNote && (
+                                          <div className="mt-1 inline-block bg-gray-50 border border-gray-200 rounded-md px-2 py-0.5">
+                                            <p className="text-xs text-gray-400">{task.completionNote}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <span className="text-xs text-gray-300 shrink-0">{task.taskType}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <span className="text-xs text-gray-300 shrink-0">{task.taskType}</span>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>}
-                    </div>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
