@@ -65,12 +65,14 @@ const EMAIL_STATUS_LABEL: Record<string, string> = {
   processed: "진행 중",
   ready: "발송 대기",
   completed: "발송 완료",
+  failed: "처리 실패",
 }
 
 const EMAIL_STATUS_STYLE: Record<string, string> = {
   processed: "bg-blue-100 text-blue-700",
   ready: "bg-orange-100 text-orange-700",
   completed: "bg-green-100 text-green-700",
+  failed: "bg-red-100 text-red-600",
 }
 
 export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
@@ -269,7 +271,8 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     try {
       const res = await fetch("/api/admin/poll", { method: "POST" })
       const data = await res.json()
-      setPollResult(`이메일 ${data.total}개 중 ${data.processed}개 처리 완료`)
+      const failMsg = data.failed > 0 ? ` · ${data.failed}개 실패` : ""
+      setPollResult(`이메일 ${data.total}개 중 ${data.processed}개 처리 완료${failMsg}`)
       loadTasks()
     } catch {
       setPollResult("오류가 발생했습니다.")
@@ -283,6 +286,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
   const inProgressEmails = visibleGroups.filter(g => g.emailStatus === "processed").length
   const readyEmails = visibleGroups.filter(g => g.emailStatus === "ready").length
   const completedEmails = visibleGroups.filter(g => g.emailStatus === "completed").length
+  const failedEmails = visibleGroups.filter(g => g.emailStatus === "failed").length
 
   const FILTER_OPTIONS: { value: StatusFilter; label: string; count: number }[] = [
     { value: "all", label: "전체", count: totalEmails },
@@ -520,7 +524,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
         </div>
 
         {/* 통계 카드 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
             <p className="text-xs text-gray-400 mb-1">전체</p>
             <p className="text-2xl font-bold text-gray-800">{totalEmails}</p>
@@ -536,6 +540,10 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
           <div className="bg-white rounded-xl border border-green-100 px-4 py-3">
             <p className="text-xs text-green-400 mb-1">발송 완료</p>
             <p className="text-2xl font-bold text-green-600">{completedEmails}</p>
+          </div>
+          <div className={`bg-white rounded-xl border px-4 py-3 ${failedEmails > 0 ? "border-red-200" : "border-gray-100"}`}>
+            <p className={`text-xs mb-1 ${failedEmails > 0 ? "text-red-400" : "text-gray-300"}`}>처리 실패</p>
+            <p className={`text-2xl font-bold ${failedEmails > 0 ? "text-red-500" : "text-gray-200"}`}>{failedEmails}</p>
           </div>
         </div>
 
