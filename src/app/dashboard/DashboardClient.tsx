@@ -62,6 +62,32 @@ export default function DashboardClient({ userName }: { userName: string }) {
   const [emailModal, setEmailModal] = useState<{ task: Task; detail: EmailDetail | null } | null>(null)
   const [loadingEmail, setLoadingEmail] = useState(false)
 
+  // 비밀번호 변경 모달
+  const [pwModal, setPwModal] = useState(false)
+  const [pwCurrent, setPwCurrent] = useState("")
+  const [pwNew, setPwNew] = useState("")
+  const [pwConfirm, setPwConfirm] = useState("")
+  const [pwError, setPwError] = useState("")
+  const [pwSaving, setPwSaving] = useState(false)
+
+  async function handleChangePassword() {
+    if (pwNew !== pwConfirm) { setPwError("새 비밀번호가 일치하지 않습니다"); return }
+    if (pwNew.length < 4) { setPwError("비밀번호는 4자 이상이어야 합니다"); return }
+    setPwSaving(true); setPwError("")
+    try {
+      const res = await fetch("/api/users/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: pwCurrent, newPassword: pwNew }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setPwError(data.error ?? "오류가 발생했습니다"); return }
+      setPwModal(false); setPwCurrent(""); setPwNew(""); setPwConfirm("")
+    } finally {
+      setPwSaving(false)
+    }
+  }
+
   useEffect(() => {
     fetch("/api/tasks")
       .then(r => r.json())
@@ -237,12 +263,21 @@ export default function DashboardClient({ userName }: { userName: string }) {
             <h1 className="text-xl font-bold text-gray-900">내 업무</h1>
             <p className="text-sm text-gray-500 mt-0.5">{userName}</p>
           </div>
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-white transition-colors"
-          >
-            로그아웃
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPwModal(true)}
+              className="text-sm text-gray-400 hover:text-gray-600 px-2 py-1.5 rounded-lg transition-colors"
+              title="비밀번호 변경"
+            >
+              🔑
+            </button>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-white transition-colors"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
 
         {loading && (
@@ -401,6 +436,55 @@ export default function DashboardClient({ userName }: { userName: string }) {
           </>
         )}
       </div>
+
+      {/* 비밀번호 변경 모달 */}
+      {pwModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setPwModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="font-semibold text-gray-800 mb-4">비밀번호 변경</h2>
+            <div className="space-y-3">
+              <input
+                type="password"
+                placeholder="현재 비밀번호"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={pwCurrent}
+                onChange={e => setPwCurrent(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="새 비밀번호 (4자 이상)"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={pwNew}
+                onChange={e => setPwNew(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="새 비밀번호 확인"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={pwConfirm}
+                onChange={e => setPwConfirm(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleChangePassword() }}
+              />
+              {pwError && <p className="text-xs text-red-500">{pwError}</p>}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={handleChangePassword}
+                disabled={pwSaving}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2.5 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {pwSaving ? "변경 중..." : "변경"}
+              </button>
+              <button
+                onClick={() => { setPwModal(false); setPwError(""); setPwCurrent(""); setPwNew(""); setPwConfirm("") }}
+                className="flex-1 border border-gray-200 text-gray-600 text-sm py-2.5 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 이메일 원문 모달 (하단 시트) */}
       {emailModal && (
