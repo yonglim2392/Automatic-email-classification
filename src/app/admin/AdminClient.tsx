@@ -296,10 +296,8 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emailId, subject: preview.subject, body: preview.body }),
       })
-      setGroups(prev =>
-        prev.map(g => g.emailId === emailId ? { ...g, emailStatus: "completed" } : g)
-      )
       setPreview(null)
+      loadTasks()
     } finally {
       setSending(prev => { const s = new Set(prev); s.delete(emailId); return s })
     }
