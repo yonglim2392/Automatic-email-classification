@@ -88,16 +88,24 @@ export default function DashboardClient({ userName }: { userName: string }) {
     }
   }
 
-  useEffect(() => {
+  function loadTasks() {
     fetch("/api/tasks")
       .then(r => r.json())
       .then((data: Task[]) => {
         setTasks(data)
         setLoading(false)
-        const done = data.filter(t => t.status === "done")
-        const dateKeys = new Set(done.map(t => new Date(t.email.receivedAt).toLocaleDateString("ko-KR")))
-        setCollapsedDates(dateKeys)
+        setCollapsedDates(prev => {
+          if (prev.size > 0) return prev
+          const done = data.filter(t => t.status === "done")
+          return new Set(done.map(t => new Date(t.email.receivedAt).toLocaleDateString("ko-KR")))
+        })
       })
+  }
+
+  useEffect(() => {
+    loadTasks()
+    const timer = setInterval(loadTasks, 30_000)
+    return () => clearInterval(timer)
   }, [])
 
   async function openEmailModal(task: Task) {

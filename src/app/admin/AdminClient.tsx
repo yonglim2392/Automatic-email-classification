@@ -151,7 +151,11 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
       })
   }
 
-  useEffect(() => { loadTasks() }, [])
+  useEffect(() => {
+    loadTasks()
+    const timer = setInterval(loadTasks, 30_000)
+    return () => clearInterval(timer)
+  }, [])
 
   async function handleAdminComplete(taskId: string) {
     if (adminCompleting.has(taskId)) return
