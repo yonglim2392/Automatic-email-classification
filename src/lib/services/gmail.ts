@@ -77,20 +77,63 @@ function encodeAddressHeader(address: string): string {
   return `=?UTF-8?B?${Buffer.from(clean).toString("base64")}?= <${email}>`
 }
 
-export async function sendEmail(to: string, subject: string, body: string): Promise<void> {
+export type EmailAttachment = {
+  filename: string
+  content: Buffer
+  mimeType: string
+}
+
+export async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  attachments: EmailAttachment[] = [],
+): Promise<void> {
   const gmail = getGmailClient()
-  const message = [
-    `To: ${encodeAddressHeader(to)}`,
-    `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
-    "Content-Type: text/plain; charset=utf-8",
-    "MIME-Version: 1.0",
-    "",
-    body,
-  ].join("\r\n")
-  const encoded = Buffer.from(message).toString("base64url")
+  let raw: string
+
+  if (attachments.length === 0) {
+    const message = [
+      `To: ${encodeAddressHeader(to)}`,
+      `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
+      "Content-Type: text/plain; charset=utf-8",
+      "MIME-Version: 1.0",
+      "",
+      body,
+    ].join("\r\n")
+    raw = Buffer.from(message).toString("base64url")
+  } else {
+    const boundary = `boundary_${Date.now()}`
+    const lines: string[] = [
+      `To: ${encodeAddressHeader(to)}`,
+      `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
+      "MIME-Version: 1.0",
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      "",
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=utf-8",
+      "Content-Transfer-Encoding: base64",
+      "",
+      Buffer.from(body).toString("base64"),
+    ]
+    for (const att of attachments) {
+      const encodedName = `=?UTF-8?B?${Buffer.from(att.filename).toString("base64")}?=`
+      lines.push(
+        `--${boundary}`,
+        `Content-Type: ${att.mimeType}; name="${encodedName}"`,
+        "Content-Transfer-Encoding: base64",
+        `Content-Disposition: attachment; filename*=UTF-8''${encodeURIComponent(att.filename)}`,
+        "",
+        att.content.toString("base64"),
+      )
+    }
+    lines.push(`--${boundary}--`)
+    raw = Buffer.from(lines.join("\r\n")).toString("base64url")
+  }
+
   await gmail.users.messages.send({
     userId: "me",
-    requestBody: { raw: encoded },
+    requestBody: { raw },
   })
 }
 

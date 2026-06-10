@@ -1,6 +1,14 @@
 "use client"
 import { useEffect, useState } from "react"
 
+type Attachment = {
+  id: string
+  filename: string
+  mimeType: string
+  size: number
+  uploadedAt: string
+}
+
 type Task = {
   id: string
   title: string
@@ -14,6 +22,7 @@ type Task = {
   adminFeedbackBy: string | null
   email: { id: string; from: string; subject: string; receivedAt: string; status: string }
   assignee: { name: string }
+  attachments: Attachment[]
 }
 
 type EmailGroup = {
@@ -44,6 +53,12 @@ function extractSenderName(from: string) {
 function extractEmail(from: string) {
   const match = from.match(/<(.+?)>/)
   return match ? match[1] : from
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
 
 function formatDateTime(dateStr: string | null) {
@@ -542,6 +557,22 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                       {task.completionNote && (
                         <div className="mt-1.5 inline-block bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
                           <p className="text-xs text-gray-500">{task.completionNote}</p>
+                        </div>
+                      )}
+                      {task.attachments.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {task.attachments.map(att => (
+                            <a
+                              key={att.id}
+                              href={`/api/attachments/${att.id}`}
+                              download={att.filename}
+                              className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 group"
+                            >
+                              <span className="text-gray-400 group-hover:text-indigo-400">📎</span>
+                              <span className="truncate max-w-[140px]">{att.filename}</span>
+                              <span className="text-gray-400 shrink-0">{formatBytes(att.size)}</span>
+                            </a>
+                          ))}
                         </div>
                       )}
                       {task.completedAt && (

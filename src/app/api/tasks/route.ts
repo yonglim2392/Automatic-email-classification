@@ -10,6 +10,7 @@ export async function GET() {
     include: {
       email: { select: { id: true, from: true, subject: true, receivedAt: true, status: true } },
       assignee: { select: { name: true } },
+      attachments: { orderBy: { uploadedAt: "asc" } },
     },
     orderBy: { createdAt: "desc" },
   })

@@ -34,24 +34,36 @@ model Email {
 }
 
 model Task {
-  id             String         @id @default(cuid())
+  id             String           @id @default(cuid())
   emailId        String
-  email          Email          @relation(fields: [emailId], references: [id])
+  email          Email            @relation(fields: [emailId], references: [id])
   title          String
   description    String
   taskType       String
   assigneeId      String
-  assignee        User           @relation(fields: [assigneeId], references: [id])
-  coAssigneeIds   String         @default("[]") // JSON: 추가 담당자 ID 목록
+  assignee        User             @relation(fields: [assigneeId], references: [id])
+  coAssigneeIds   String           @default("[]") // JSON: 추가 담당자 ID 목록
   deadline        DateTime?
-  status          String         @default("pending")
+  status          String           @default("pending")
   completedAt     DateTime?
   completionNote  String?
   completedByName String?
   adminFeedback   String?
   adminFeedbackBy String?
   notifications   Notification[]
-  createdAt      DateTime       @default(now())
+  attachments     TaskAttachment[]
+  createdAt      DateTime         @default(now())
+}
+
+model TaskAttachment {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  filename   String
+  mimeType   String
+  size       Int
+  storedPath String
+  uploadedAt DateTime @default(now())
 }
 
 model RoutingRule {

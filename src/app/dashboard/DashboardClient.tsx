@@ -2,6 +2,14 @@
 import { useEffect, useState } from "react"
 import { signOut } from "next-auth/react"
 
+type Attachment = {
+  id: string
+  filename: string
+  mimeType: string
+  size: number
+  uploadedAt: string
+}
+
 type Task = {
   id: string
   title: string
@@ -16,6 +24,7 @@ type Task = {
   adminFeedbackBy: string | null
   email: { id: string; from: string; subject: string; receivedAt: string }
   assignee: { name: string }
+  attachments: Attachment[]
 }
 
 type EmailGroup = { emailId: string; from: string; subject: string; receivedAt: string; tasks: Task[] }
@@ -41,6 +50,12 @@ function extractSenderName(from: string) {
   return match ? match[1].trim().replace(/^"|"$/g, "") : from
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
 function extractEmail(from: string) {
   const match = from.match(/<(.+?)>/)
   return match ? match[1] : from
@@ -63,6 +78,33 @@ export default function DashboardClient({ userName }: { userName: string }) {
   // 이메일 원문 모달
   const [emailModal, setEmailModal] = useState<{ task: Task; detail: EmailDetail | null } | null>(null)
   const [loadingEmail, setLoadingEmail] = useState(false)
+
+  // 파일 첨부
+  const [uploading, setUploading] = useState<Record<string, boolean>>({})
+
+  async function handleUploadFile(taskId: string, file: File) {
+    setUploading(prev => ({ ...prev, [taskId]: true }))
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body: fd })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error ?? "파일 업로드에 실패했습니다.")
+        return
+      }
+      loadTasks()
+    } finally {
+      setUploading(prev => ({ ...prev, [taskId]: false }))
+    }
+  }
+
+  async function handleDeleteAttachment(taskId: string, attachmentId: string) {
+    if (!confirm("첨부파일을 삭제하시겠습니까?")) return
+    const res = await fetch(`/api/attachments/${attachmentId}`, { method: "DELETE" })
+    if (!res.ok) { alert("삭제에 실패했습니다."); return }
+    loadTasks()
+  }
 
   // 완료 취소 / 메모 수정
   const [editNoteId, setEditNoteId] = useState<string | null>(null)
@@ -458,6 +500,31 @@ export default function DashboardClient({ userName }: { userName: string }) {
                             <p className="text-sm text-gray-400 mt-1">마감 {formatDeadline(task.deadline)}</p>
                           )}
                         </div>
+                        {/* 첨부파일 목록 */}
+                        {task.attachments.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            {task.attachments.map(att => (
+                              <div key={att.id} className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
+                                <span className="text-gray-400 text-xs shrink-0">📎</span>
+                                <a
+                                  href={`/api/attachments/${att.id}`}
+                                  download={att.filename}
+                                  className="flex-1 min-w-0 text-xs text-indigo-600 hover:text-indigo-800 truncate"
+                                >
+                                  {att.filename}
+                                </a>
+                                <span className="text-xs text-gray-400 shrink-0">{formatBytes(att.size)}</span>
+                                <button
+                                  onClick={() => handleDeleteAttachment(task.id, att.id)}
+                                  className="shrink-0 text-gray-300 hover:text-red-400 transition-colors text-xs"
+                                  title="삭제"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex gap-2 mt-3">
                           <input
                             type="text"
@@ -468,6 +535,24 @@ export default function DashboardClient({ userName }: { userName: string }) {
                             disabled={isCompleting}
                             onKeyDown={e => { if (e.key === "Enter") handleComplete(task.id) }}
                           />
+                          <label className="shrink-0 cursor-pointer border border-gray-200 text-gray-500 hover:text-indigo-600 hover:border-indigo-300 text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-1 bg-white" title="파일 첨부">
+                            {uploading[task.id] ? (
+                              <span className="text-xs">...</span>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                              </svg>
+                            )}
+                            <input
+                              type="file"
+                              className="hidden"
+                              disabled={uploading[task.id]}
+                              onChange={e => {
+                                const file = e.target.files?.[0]
+                                if (file) { handleUploadFile(task.id, file); e.target.value = "" }
+                              }}
+                            />
+                          </label>
                           <button
                             onClick={() => handleComplete(task.id)}
                             disabled={isCompleting}
