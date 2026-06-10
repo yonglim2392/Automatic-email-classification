@@ -42,6 +42,9 @@ export default function RulesPage() {
 
   // 편집 상태 (각 규칙 inline 편집)
   const [editState, setEditState] = useState<Record<string, { desc: string; primary: string; coIds: string[] }>>({})
+  // 고급 설정 펼침 상태
+  const [advancedOpen, setAdvancedOpen] = useState<Set<string>>(new Set())
+  const [newAdvancedOpen, setNewAdvancedOpen] = useState(false)
 
   async function refresh() {
     const data = await fetch("/api/admin/rules").then(r => r.json())
@@ -160,13 +163,25 @@ export default function RulesPage() {
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500 mb-1 block">분류 설명 (AI 힌트)</label>
-            <input
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-              placeholder="예: 가격 협상, 할인 요청, 인보이스 관련..."
-              value={newDesc}
-              onChange={e => setNewDesc(e.target.value)}
-            />
+            <button
+              type="button"
+              onClick={() => setNewAdvancedOpen(v => !v)}
+              className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors"
+            >
+              <span>{newAdvancedOpen ? "▲" : "▼"}</span>
+              고급 설정 (AI 분류 힌트)
+            </button>
+            {newAdvancedOpen && (
+              <div className="mt-2">
+                <input
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  placeholder="예: 가격 협상, 할인 요청, 인보이스 관련..."
+                  value={newDesc}
+                  onChange={e => setNewDesc(e.target.value)}
+                />
+                <p className="text-xs text-slate-400 mt-1">이 설명을 AI가 참고해 이메일을 해당 유형으로 분류합니다.</p>
+              </div>
+            )}
           </div>
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1 block">공동 담당자 (복수 선택 가능)</label>
@@ -260,15 +275,6 @@ export default function RulesPage() {
               </div>
 
               <div className="space-y-2">
-                <div>
-                  <label className="text-xs font-medium text-slate-400 mb-1 block">분류 설명 (AI 힌트)</label>
-                  <input
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    placeholder="AI가 이 유형으로 분류할 때 참고할 설명..."
-                    value={state.desc}
-                    onChange={e => setEditState(s => ({ ...s, [rule.taskType]: { ...s[rule.taskType], desc: e.target.value } }))}
-                  />
-                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-slate-400 mb-1 block">주담당자</label>
@@ -308,6 +314,34 @@ export default function RulesPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen(prev => {
+                      const next = new Set(prev)
+                      next.has(rule.taskType) ? next.delete(rule.taskType) : next.add(rule.taskType)
+                      return next
+                    })}
+                    className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors mt-1"
+                  >
+                    <span>{advancedOpen.has(rule.taskType) ? "▲" : "▼"}</span>
+                    고급 설정 (AI 분류 힌트)
+                    {state.desc && !advancedOpen.has(rule.taskType) && (
+                      <span className="ml-1 text-indigo-400">·</span>
+                    )}
+                  </button>
+                  {advancedOpen.has(rule.taskType) && (
+                    <div className="mt-2">
+                      <input
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        placeholder="AI가 이 유형으로 분류할 때 참고할 설명..."
+                        value={state.desc}
+                        onChange={e => setEditState(s => ({ ...s, [rule.taskType]: { ...s[rule.taskType], desc: e.target.value } }))}
+                      />
+                      <p className="text-xs text-slate-400 mt-1">이 설명을 AI가 참고해 이메일을 해당 유형으로 분류합니다.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
