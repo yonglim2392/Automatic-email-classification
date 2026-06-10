@@ -131,8 +131,12 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
     setLoadingEmailBody(true)
     try {
       const res = await fetch(`/api/tasks/email-body?emailId=${emailId}`)
-      const data = await res.json()
-      setEmailModal(prev => prev ? { ...prev, originalBody: data.body ?? null } : prev)
+      if (res.ok) {
+        const data = await res.json()
+        setEmailModal(prev => prev ? { ...prev, originalBody: data.body ?? null } : prev)
+      }
+    } catch {
+      // 원문 로드 실패 — 모달은 열린 상태 유지
     } finally {
       setLoadingEmailBody(false)
     }
@@ -157,7 +161,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
 
   function loadTasks() {
     fetch("/api/tasks")
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error("tasks fetch failed"); return r.json() })
       .then((tasks: Task[]) => {
         const map = new Map<string, EmailGroup>()
         for (const task of tasks) {
@@ -189,6 +193,7 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
         const dateSet = new Set(newGroups.map(g => new Date(g.receivedAt).toLocaleDateString("ko-KR")))
         setCollapsedDates(dateSet)
       })
+      .catch(() => { /* 서버 재시작 중이거나 네트워크 오류 — 다음 인터벌에 재시도 */ })
   }
 
   useEffect(() => {
@@ -495,19 +500,11 @@ export default function AdminClient({ assignees }: { assignees: Assignee[] }) {
                   {previewing.has(group.emailId) ? "불러오는 중..." : "📤 메일 발송"}
                 </button>
               )}
-              {group.emailStatus === "completed" && group.summaryBody && (
-                <button
-                  onClick={e => { e.stopPropagation(); openEmailModal(group.emailId, group.from, group.subject, group.receivedAt, group.summarySubject, group.summaryBody, "sent") }}
-                  className="text-xs text-green-600 hover:text-green-800 border border-green-200 hover:border-green-400 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-md transition-colors"
-                >
-                  발송 내용
-                </button>
-              )}
               <button
                 onClick={e => { e.stopPropagation(); openEmailModal(group.emailId, group.from, group.subject, group.receivedAt, group.summarySubject, group.summaryBody) }}
                 className="text-xs text-gray-400 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 px-2 py-0.5 rounded-md transition-colors"
               >
-                원문
+                {group.summaryBody ? "원문/발송" : "원문"}
               </button>
               <span className="text-gray-300 text-xs">{isOpen ? "▲" : "▼"}</span>
             </div>
