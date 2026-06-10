@@ -17,6 +17,7 @@ type Task = {
 
 type EmailGroup = { emailId: string; from: string; subject: string; receivedAt: string; tasks: Task[] }
 type BuyerGroup = { buyerKey: string; buyerName: string; emails: EmailGroup[] }
+type EmailDetail = { from: string; subject: string; receivedAt: string; body: string }
 
 function daysLeft(deadline: string | null): number | null {
   if (!deadline) return null
@@ -42,6 +43,12 @@ function extractEmail(from: string) {
   return match ? match[1] : from
 }
 
+function shortDate(iso: string | null) {
+  if (!iso) return ""
+  const d = new Date(iso)
+  return d.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })
+}
+
 export default function DashboardClient({ userName }: { userName: string }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,6 +57,10 @@ export default function DashboardClient({ userName }: { userName: string }) {
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
   const [expandedBuyers, setExpandedBuyers] = useState<Set<string>>(new Set())
   const [doneView, setDoneView] = useState<"date" | "buyer">("date")
+
+  // 이메일 원문 모달
+  const [emailModal, setEmailModal] = useState<{ task: Task; detail: EmailDetail | null } | null>(null)
+  const [loadingEmail, setLoadingEmail] = useState(false)
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -62,6 +73,18 @@ export default function DashboardClient({ userName }: { userName: string }) {
         setCollapsedDates(dateKeys)
       })
   }, [])
+
+  async function openEmailModal(task: Task) {
+    setEmailModal({ task, detail: null })
+    setLoadingEmail(true)
+    try {
+      const res = await fetch(`/api/tasks/email-body?emailId=${task.email.id}`)
+      const data = await res.json()
+      setEmailModal({ task, detail: data })
+    } finally {
+      setLoadingEmail(false)
+    }
+  }
 
   function toggleDate(date: string) {
     setCollapsedDates(prev => {
@@ -111,39 +134,38 @@ export default function DashboardClient({ userName }: { userName: string }) {
     })
   const done = tasks.filter(t => t.status === "done")
 
-  // 이메일 단위로 완료 태스크 그룹화
+  // 이메일 단위 그룹화
   const emailGroupMap = new Map<string, EmailGroup>()
   for (const t of done) {
     if (!emailGroupMap.has(t.email.id)) {
       emailGroupMap.set(t.email.id, {
-        emailId: t.email.id,
-        from: t.email.from,
-        subject: t.email.subject,
-        receivedAt: t.email.receivedAt,
-        tasks: [],
+        emailId: t.email.id, from: t.email.from,
+        subject: t.email.subject, receivedAt: t.email.receivedAt, tasks: [],
       })
     }
     emailGroupMap.get(t.email.id)!.tasks.push(t)
   }
 
-  // 날짜별: receivedAt 기준 날짜 → 이메일 목록
-  const dateMap = new Map<string, { ts: number; emails: EmailGroup[] }>()
-  for (const eg of emailGroupMap.values()) {
-    const ts = new Date(eg.receivedAt).getTime()
-    const dateKey = new Date(eg.receivedAt).toLocaleDateString("ko-KR")
-    if (!dateMap.has(dateKey)) dateMap.set(dateKey, { ts, emails: [] })
-    const entry = dateMap.get(dateKey)!
+  // 날짜별: receivedAt 기준
+  const dateGroupMap = new Map<string, { ts: number; tasks: Task[] }>()
+  for (const t of done) {
+    const ts = new Date(t.email.receivedAt).getTime()
+    const key = new Date(t.email.receivedAt).toLocaleDateString("ko-KR")
+    if (!dateGroupMap.has(key)) dateGroupMap.set(key, { ts, tasks: [] })
+    const entry = dateGroupMap.get(key)!
     if (entry.ts < ts) entry.ts = ts
-    entry.emails.push(eg)
+    entry.tasks.push(t)
   }
-  const sortedDates = [...dateMap.entries()]
+  const sortedDates = [...dateGroupMap.entries()]
     .sort((a, b) => b[1].ts - a[1].ts)
-    .map(([date, { emails }]) => ({
+    .map(([date, { tasks: dateTasks }]) => ({
       date,
-      emails: [...emails].sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()),
+      tasks: [...dateTasks].sort((a, b) =>
+        new Date(b.completedAt ?? b.email.receivedAt).getTime() - new Date(a.completedAt ?? a.email.receivedAt).getTime()
+      ),
     }))
 
-  // 바이어별: 발신자 이메일 주소 → 이메일 목록
+  // 바이어별
   const buyerMap = new Map<string, BuyerGroup>()
   for (const eg of emailGroupMap.values()) {
     const key = extractEmail(eg.from).toLowerCase()
@@ -158,43 +180,46 @@ export default function DashboardClient({ userName }: { userName: string }) {
       const bLatest = Math.max(...b.emails.map(e => new Date(e.receivedAt).getTime()))
       return bLatest - aLatest
     })
-    .map(buyer => ({
-      ...buyer,
-      emails: [...buyer.emails].sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()),
-    }))
+    .map(buyer => {
+      const allTasks = buyer.emails
+        .flatMap(e => e.tasks)
+        .sort((a, b) =>
+          new Date(b.completedAt ?? b.email.receivedAt).getTime() - new Date(a.completedAt ?? a.email.receivedAt).getTime()
+        )
+      return { ...buyer, allTasks }
+    })
 
-  function renderEmailCard(eg: EmailGroup, showSender = true) {
+  // 태스크 행 렌더링
+  function renderTaskRow(task: Task, showBuyer = false) {
     return (
-      <div key={eg.emailId} className="bg-white border border-gray-100 rounded-lg overflow-hidden">
-        <div className="px-4 py-2.5 bg-gray-50 flex items-center gap-2 border-b border-gray-100">
-          <div className="min-w-0 flex-1">
-            {showSender && (
-              <>
-                <span className="text-xs font-medium text-gray-600">{extractSenderName(eg.from)}</span>
-                <span className="text-gray-300 mx-1.5 text-xs">·</span>
-              </>
+      <button
+        key={task.id}
+        onClick={() => openEmailModal(task)}
+        className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-indigo-50/40 active:bg-indigo-50 transition-colors group"
+      >
+        <span className="text-green-400 text-xs shrink-0">✓</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-700 leading-snug">{task.title}</p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            {showBuyer && (
+              <span className="text-xs text-gray-400">{extractSenderName(task.email.from)}</span>
             )}
-            <span className="text-xs text-gray-500">{eg.subject}</span>
+            {showBuyer && task.completionNote && <span className="text-gray-200 text-xs">·</span>}
+            {task.completionNote && (
+              <span className="text-xs text-gray-400 italic">{task.completionNote}</span>
+            )}
           </div>
-          <span className="text-xs text-gray-300 shrink-0">{eg.tasks.length}건</span>
         </div>
-        <div className="divide-y divide-gray-50">
-          {eg.tasks.map(task => (
-            <div key={task.id} className="px-4 py-2.5 flex items-start gap-2">
-              <span className="text-green-400 text-xs shrink-0 mt-0.5">✓</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-gray-400 line-through leading-snug">{task.title}</p>
-                {task.completionNote && (
-                  <div className="mt-1 inline-block bg-gray-50 border border-gray-200 rounded-md px-2 py-0.5">
-                    <p className="text-xs text-gray-400">{task.completionNote}</p>
-                  </div>
-                )}
-              </div>
-              <span className="text-xs text-gray-300 shrink-0">{task.taskType}</span>
-            </div>
-          ))}
+        <div className="shrink-0 flex items-center gap-2">
+          <div className="text-right">
+            <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md block">{task.taskType}</span>
+            <span className="text-xs text-gray-400 mt-0.5 block">{shortDate(task.completedAt)}</span>
+          </div>
+          <svg className="w-3.5 h-3.5 text-gray-200 group-hover:text-gray-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
         </div>
-      </div>
+      </button>
     )
   }
 
@@ -215,7 +240,6 @@ export default function DashboardClient({ userName }: { userName: string }) {
           </button>
         </div>
 
-        {/* 로딩 */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <div className="w-7 h-7 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
@@ -313,25 +337,22 @@ export default function DashboardClient({ userName }: { userName: string }) {
 
                 {/* 날짜별 뷰 */}
                 {doneView === "date" && (
-                  <div className="space-y-5">
-                    {sortedDates.map(({ date, emails }) => {
+                  <div className="space-y-3">
+                    {sortedDates.map(({ date, tasks: dateTasks }) => {
                       const isCollapsed = collapsedDates.has(date)
-                      const totalTasks = emails.reduce((s, e) => s + e.tasks.length, 0)
                       return (
-                        <div key={date}>
-                          <div
-                            className="flex items-center gap-2 mb-2 cursor-pointer select-none group"
+                        <div key={date} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                          <button
                             onClick={() => toggleDate(date)}
+                            className="w-full px-4 py-3 flex items-center gap-2 hover:bg-gray-50 transition-colors select-none"
                           >
-                            <p className="text-xs font-semibold text-gray-500">{date}</p>
-                            <span className="text-xs text-gray-300">이메일 {emails.length}개 · {totalTasks}건</span>
-                            <span className="ml-auto text-gray-300 text-xs group-hover:text-gray-400">
-                              {isCollapsed ? "▼" : "▲"}
-                            </span>
-                          </div>
+                            <p className="text-sm font-semibold text-gray-700">{date}</p>
+                            <span className="text-xs text-gray-400">{dateTasks.length}건</span>
+                            <span className="ml-auto text-gray-300 text-xs">{isCollapsed ? "▼" : "▲"}</span>
+                          </button>
                           {!isCollapsed && (
-                            <div className="space-y-2">
-                              {emails.map(eg => renderEmailCard(eg, true))}
+                            <div className="border-t border-gray-100 divide-y divide-gray-50">
+                              {dateTasks.map(t => renderTaskRow(t, true))}
                             </div>
                           )}
                         </div>
@@ -345,29 +366,24 @@ export default function DashboardClient({ userName }: { userName: string }) {
                   <div className="space-y-3">
                     {buyers.map(buyer => {
                       const isOpen = expandedBuyers.has(buyer.buyerKey)
-                      const totalTasks = buyer.emails.reduce((s, e) => s + e.tasks.length, 0)
                       return (
                         <div key={buyer.buyerKey} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                          <div
+                          <button
                             onClick={() => toggleBuyer(buyer.buyerKey)}
-                            className="px-4 py-3.5 flex items-center gap-3 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+                            className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors select-none"
                           >
-                            <div className="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
-                              <span className="text-indigo-600 text-sm font-semibold">
-                                {buyer.buyerName.slice(0, 1)}
-                              </span>
+                            <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                              <span className="text-indigo-600 text-sm font-semibold">{buyer.buyerName.slice(0, 1)}</span>
                             </div>
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 text-left">
                               <p className="font-semibold text-gray-800 text-sm truncate">{buyer.buyerName}</p>
-                              <p className="text-xs text-gray-400 mt-0.5">
-                                이메일 {buyer.emails.length}개 · 태스크 {totalTasks}건
-                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">{buyer.allTasks.length}건 완료</p>
                             </div>
                             <span className="text-gray-300 text-xs shrink-0">{isOpen ? "▲" : "▼"}</span>
-                          </div>
+                          </button>
                           {isOpen && (
-                            <div className="border-t border-gray-100 px-4 py-3 space-y-2 bg-gray-50/50">
-                              {buyer.emails.map(eg => renderEmailCard(eg, false))}
+                            <div className="border-t border-gray-100 divide-y divide-gray-50">
+                              {buyer.allTasks.map(t => renderTaskRow(t, false))}
                             </div>
                           )}
                         </div>
@@ -380,6 +396,68 @@ export default function DashboardClient({ userName }: { userName: string }) {
           </>
         )}
       </div>
+
+      {/* 이메일 원문 모달 (하단 시트) */}
+      {emailModal && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setEmailModal(null)}
+        >
+          <div
+            className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[80vh] flex flex-col shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="px-5 pt-5 pb-4 border-b border-gray-100 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-400 mb-0.5">{extractSenderName(emailModal.task.email.from)}</p>
+                  <p className="font-semibold text-gray-800 leading-snug">{emailModal.task.email.subject}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    수신 {new Date(emailModal.task.email.receivedAt).toLocaleString("ko-KR", {
+                      month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEmailModal(null)}
+                  className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 mt-0.5"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* 처리한 업무 요약 */}
+              <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg">
+                <span className="text-green-500 text-xs">✓</span>
+                <span className="text-xs font-medium text-green-700">{emailModal.task.title}</span>
+                {emailModal.task.completionNote && (
+                  <>
+                    <span className="text-green-300 text-xs">·</span>
+                    <span className="text-xs text-green-600">{emailModal.task.completionNote}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* 이메일 본문 */}
+            <div className="overflow-y-auto flex-1 px-5 py-4">
+              {loadingEmail ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                </div>
+              ) : emailModal.detail ? (
+                <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
+                  {emailModal.detail.body}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-400 text-center py-12">이메일을 불러올 수 없습니다.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
