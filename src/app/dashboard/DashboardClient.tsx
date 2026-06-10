@@ -62,6 +62,47 @@ export default function DashboardClient({ userName }: { userName: string }) {
   const [emailModal, setEmailModal] = useState<{ task: Task; detail: EmailDetail | null } | null>(null)
   const [loadingEmail, setLoadingEmail] = useState(false)
 
+  // 완료 취소 / 메모 수정
+  const [editNoteId, setEditNoteId] = useState<string | null>(null)
+  const [editNoteText, setEditNoteText] = useState("")
+  const [savingNote, setSavingNote] = useState(false)
+  const [reopening, setReopening] = useState<Set<string>>(new Set())
+
+  async function handleReopen(taskId: string) {
+    setReopening(prev => new Set([...prev, taskId]))
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reopen" }),
+      })
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, status: "pending", completedAt: null, completionNote: null, completedByName: null }
+          : t
+      ))
+    } finally {
+      setReopening(prev => { const s = new Set(prev); s.delete(taskId); return s })
+    }
+  }
+
+  async function handleSaveNote(taskId: string) {
+    setSavingNote(true)
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completionNote: editNoteText }),
+      })
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, completionNote: editNoteText } : t
+      ))
+      setEditNoteId(null)
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
   // 비밀번호 변경 모달
   const [pwModal, setPwModal] = useState(false)
   const [pwCurrent, setPwCurrent] = useState("")
@@ -225,40 +266,86 @@ export default function DashboardClient({ userName }: { userName: string }) {
 
   // 태스크 행 렌더링
   function renderTaskRow(task: Task, showBuyer = false) {
+    const isEditingNote = editNoteId === task.id
+
     return (
-      <button
-        key={task.id}
-        onClick={() => openEmailModal(task)}
-        className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-indigo-50/40 active:bg-indigo-50 transition-colors group"
-      >
-        <span className="text-green-400 text-xs shrink-0">✓</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-700 leading-snug">{task.title}</p>
-          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            {showBuyer && (
-              <span className="text-xs text-gray-400">{extractSenderName(task.email.from)}</span>
-            )}
-            {task.completedByName && task.completedByName !== userName && (
-              <span className="text-xs text-indigo-400">처리: {task.completedByName}</span>
-            )}
-            {(showBuyer || (task.completedByName && task.completedByName !== userName)) && task.completionNote && (
-              <span className="text-gray-200 text-xs">·</span>
-            )}
-            {task.completionNote && (
-              <span className="text-xs text-gray-400 italic">{task.completionNote}</span>
-            )}
+      <div key={task.id} className="px-4 py-3">
+        {isEditingNote ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">{task.title}</p>
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                className="flex-1 text-sm border border-indigo-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={editNoteText}
+                onChange={e => setEditNoteText(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleSaveNote(task.id); if (e.key === "Escape") setEditNoteId(null) }}
+                placeholder="완료 메모"
+              />
+              <button
+                onClick={() => handleSaveNote(task.id)}
+                disabled={savingNote}
+                className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+              >
+                저장
+              </button>
+              <button
+                onClick={() => setEditNoteId(null)}
+                className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="shrink-0 flex items-center gap-2">
-          <div className="text-right">
-            <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md block">{task.taskType}</span>
-            <span className="text-xs text-gray-400 mt-0.5 block">{shortDateTime(task.completedAt)}</span>
+        ) : (
+          <div className="flex items-center gap-3 group">
+            <span className="text-green-400 text-xs shrink-0">✓</span>
+            <button
+              onClick={() => openEmailModal(task)}
+              className="flex-1 min-w-0 text-left"
+            >
+              <p className="text-sm font-medium text-gray-700 leading-snug">{task.title}</p>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                {showBuyer && (
+                  <span className="text-xs text-gray-400">{extractSenderName(task.email.from)}</span>
+                )}
+                {task.completedByName && task.completedByName !== userName && (
+                  <span className="text-xs text-indigo-400">처리: {task.completedByName}</span>
+                )}
+                {(showBuyer || (task.completedByName && task.completedByName !== userName)) && task.completionNote && (
+                  <span className="text-gray-200 text-xs">·</span>
+                )}
+                {task.completionNote && (
+                  <span className="text-xs text-gray-400 italic">{task.completionNote}</span>
+                )}
+              </div>
+            </button>
+            <div className="shrink-0 flex items-center gap-1.5">
+              <div className="text-right">
+                <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md block">{task.taskType}</span>
+                <span className="text-xs text-gray-400 mt-0.5 block">{shortDateTime(task.completedAt)}</span>
+              </div>
+              <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => { setEditNoteId(task.id); setEditNoteText(task.completionNote ?? "") }}
+                  className="text-xs text-gray-400 hover:text-indigo-500 px-1.5 py-0.5 rounded border border-transparent hover:border-indigo-200 transition-colors"
+                  title="메모 수정"
+                >
+                  수정
+                </button>
+                <button
+                  onClick={() => handleReopen(task.id)}
+                  disabled={reopening.has(task.id)}
+                  className="text-xs text-gray-400 hover:text-orange-500 px-1.5 py-0.5 rounded border border-transparent hover:border-orange-200 transition-colors disabled:opacity-40"
+                  title="완료 취소"
+                >
+                  {reopening.has(task.id) ? "..." : "취소"}
+                </button>
+              </div>
+            </div>
           </div>
-          <svg className="w-3.5 h-3.5 text-gray-200 group-hover:text-gray-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </div>
-      </button>
+        )}
+      </div>
     )
   }
 
